@@ -66,12 +66,6 @@ export default function Onboarding() {
   const createWorkspace = useMutation(api.workspaces.create);
   const existingWorkspace = useQuery(api.workspaces.getForMe);
 
-  // Returning users with a workspace skip onboarding entirely
-  // (unless we're mid-generation — step 3 owns its own navigation).
-  useEffect(() => {
-    if (existingWorkspace && step !== 3) navigate("/app", { replace: true });
-  }, [existingWorkspace, step, navigate]);
-
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [prompt, setPrompt] = useState("");
   const [name, setName] = useState("");
@@ -82,6 +76,12 @@ export default function Onboarding() {
   const [stageIndex, setStageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const startedRef = useRef(false);
+
+  // Returning users with a workspace skip onboarding entirely
+  // (unless we're mid-generation — step 3 owns its own navigation).
+  useEffect(() => {
+    if (existingWorkspace && step !== 3) navigate("/app", { replace: true });
+  }, [existingWorkspace, step, navigate]);
 
   const detected = useMemo(() => detectBusinessType(prompt), [prompt]);
 
