@@ -139,6 +139,18 @@
   ::selection {
     background: color-mix(in oklab, var(--primary) 18%, transparent);
   }
+  /*
+   * Mobile/touch: keep form fields at 16px so iOS Safari doesn't zoom into
+   * them on focus. Scoped to coarse pointers — desktop sizing is untouched.
+   * The !important is what lets this win over Tailwind's text-sm utilities.
+   */
+  @media (pointer: coarse) {
+    input:not([type="checkbox"]):not([type="radio"]),
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
   button:not([disabled]),
   [role="button"]:not([disabled]) {
     cursor: pointer;

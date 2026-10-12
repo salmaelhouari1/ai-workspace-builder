@@ -215,7 +215,7 @@ export default function InboxPage() {
                   >
                     <Icon className="size-3.5" />
                   </span>
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 break-words">
                     <Input
                       value={entry.title}
                       onChange={(e) =>

@@ -213,7 +213,7 @@ export function Markdown({
   const blocks = parseBlocks(content);
 
   return (
-    <div className={cn("space-y-3 text-sm leading-relaxed", className)}>
+    <div className={cn("space-y-3 break-words text-sm leading-relaxed", className)}>
       {blocks.map((block, index) => {
         const key = `b-${index}`;
         switch (block.type) {

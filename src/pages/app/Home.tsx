@@ -210,7 +210,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => navigate(item.projectId ? `/app/projects/${item.projectId}` : "/app/tasks")}
-                  className="min-w-0 flex-1 text-left"
+                  className="min-w-0 flex-1 break-words text-left"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium leading-snug text-foreground">
@@ -230,7 +230,7 @@ export default function Home() {
                   type="button"
                   aria-label={`Mark "${item.title}" done`}
                   onClick={() => handleComplete(item.taskId, item.title)}
-                  className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border border-border/80 text-transparent transition-all hover:border-primary hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:text-muted-foreground/60"
+                  className="relative flex size-7 shrink-0 items-center justify-center rounded-full border border-border/80 text-transparent transition-all hover:border-primary hover:bg-primary hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:text-muted-foreground/60 before:absolute before:-inset-2 before:rounded-full before:content-['']"
                 >
                   <Check className="size-4" />
                 </button>

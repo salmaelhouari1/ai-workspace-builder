@@ -138,11 +138,12 @@ export default function Landing() {
           </nav>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => navigate(isAuthenticated ? "/app" : "/auth?returnTo=/app")}>
+            <Button variant="ghost" size="sm" className="hidden sm:inline-flex" onClick={() => navigate(isAuthenticated ? "/app" : "/auth?returnTo=/app")}>
               {isAuthenticated ? "Open workspace" : "Sign in"}
             </Button>
             <Button size="sm" className="gap-1.5" onClick={() => navigate(startHref)}>
-              Build my workspace
+              <span className="hidden sm:inline">Build my workspace</span>
+              <span className="sm:hidden">Get started</span>
               <ArrowRight className="size-3.5" />
             </Button>
           </div>

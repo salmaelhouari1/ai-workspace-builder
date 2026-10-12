@@ -153,7 +153,7 @@ export default function Assistant() {
             {messages.map((message) =>
               message.role === "user" ? (
                 <div key={message._id} className="flex justify-end">
-                  <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground">
+                  <div className="max-w-[85%] break-words rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm leading-relaxed text-primary-foreground">
                     {message.content}
                   </div>
                 </div>

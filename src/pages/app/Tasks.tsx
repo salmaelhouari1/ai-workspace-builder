@@ -144,14 +144,16 @@ export default function Tasks() {
 
       {/* Filters */}
       <div className="mt-5 flex flex-wrap items-center gap-3">
-        <Tabs value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
-          <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="todo">To do</TabsTrigger>
-            <TabsTrigger value="in_progress">In progress</TabsTrigger>
-            <TabsTrigger value="done">Done</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="max-w-full overflow-x-auto pb-0.5">
+          <Tabs value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
+            <TabsList>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="todo">To do</TabsTrigger>
+              <TabsTrigger value="in_progress">In progress</TabsTrigger>
+              <TabsTrigger value="done">Done</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
 
         <select
           value={projectFilter}
@@ -202,7 +204,7 @@ export default function Tasks() {
                       )
                     }
                     className={cn(
-                      "flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
+                      "relative flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors before:absolute before:-inset-2.5 before:rounded-full before:content-['']",
                       done
                         ? "border-primary bg-primary text-primary-foreground"
                         : "border-border/80 text-transparent hover:border-primary hover:text-primary/40",
@@ -244,7 +246,7 @@ export default function Tasks() {
                   <Flag
                     className={cn(
                       "size-3.5 shrink-0",
-                      task.priority === "high" ? PRIORITY_STYLE.high : "opacity-0 group-hover:opacity-100",
+                      task.priority === "high" ? PRIORITY_STYLE.high : "opacity-0 group-hover:opacity-100 max-md:opacity-100",
                       task.priority === "medium" && PRIORITY_STYLE.medium,
                       task.priority === "low" && PRIORITY_STYLE.low,
                     )}
@@ -256,7 +258,7 @@ export default function Tasks() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="size-7 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100"
+                        className="size-7 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100 max-md:opacity-100"
                       >
                         <MoreHorizontal className="size-4" />
                       </Button>

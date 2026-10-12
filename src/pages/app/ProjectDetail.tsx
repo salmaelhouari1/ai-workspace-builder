@@ -267,7 +267,7 @@ export default function ProjectDetail() {
                         </span>
                         <button
                           onClick={() => advance(task._id, task.status)}
-                          className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
+                          className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100 max-md:opacity-100"
                           aria-label="Move forward"
                         >
                           <ArrowRight className="size-3.5" />
