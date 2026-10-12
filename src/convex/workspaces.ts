@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query } from "./_generated/server";
 import { currentUserWorkspace, requireWorkspace } from "./lib/auth";
 import { buildSeed, seedDayStart, ALL_MODULES } from "./lib/templates";
@@ -53,12 +54,16 @@ export const create = mutation({
     stage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const session = await requireWorkspace(ctx);
+    // Onboarding runs BEFORE any membership exists — requireWorkspace would
+    // throw "Not authenticated" for every brand-new user here — so this one
+    // mutation only requires a signed-in session.
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not authenticated");
 
     // v1: one workspace per user — onboarding runs once.
     const existing = await ctx.db
       .query("workspaceMembers")
-      .withIndex("by_user", (q) => q.eq("userId", session.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .first();
     if (existing) throw new Error("You already have a workspace.");
 
@@ -82,7 +87,7 @@ export const create = mutation({
       mainGoal: args.mainGoal,
       teamSize: args.teamSize,
       stage: args.stage,
-      ownerId: session.userId,
+      ownerId: userId,
       modules: ALL_MODULES,
       onboardedAt: now,
       createdAt: now,
@@ -90,7 +95,7 @@ export const create = mutation({
 
     await ctx.db.insert("workspaceMembers", {
       workspaceId,
-      userId: session.userId,
+      userId,
       role: "owner",
     });
 
