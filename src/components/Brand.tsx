@@ -1,29 +1,36 @@
 import { cn } from "@/lib/utils";
 
-/** OCIVO monogram — an open ring with a spark: "structure + AI". */
+/**
+ * The OCIVO octopus — "the workspace that has a hold on everything."
+ * Single-weight stroke mark; inherits color via currentColor (defaults to
+ * the Forest primary token).
+ */
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <span
-      className={cn(
-        "flex shrink-0 items-center justify-center rounded-[10px] bg-primary text-primary-foreground shadow-[0_1px_2px_rgba(0,0,0,0.12)]",
-        className,
-      )}
+    <svg
+      viewBox="0 0 1024 1024"
+      fill="none"
       aria-hidden
+      className={cn("text-primary", className)}
     >
-      <svg viewBox="0 0 24 24" fill="none" className="size-[60%]">
-        <circle
-          cx="11"
-          cy="13"
-          r="5.4"
-          stroke="currentColor"
-          strokeWidth="2.6"
-        />
-        <path
-          d="M18.6 3.2l.75 1.85 1.85.75-1.85.75-.75 1.85-.75-1.85-1.85-.75 1.85-.75.75-1.85z"
-          fill="currentColor"
-        />
-      </svg>
-    </span>
+      <g
+        stroke="currentColor"
+        strokeWidth={64}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {/* Head arch flowing into the right tentacle curl */}
+        <path d="M322 437 L322 308 A158 158 0 0 1 638 308 L638 545 C638 618 715 640 826 637 A78 78 0 1 0 780 510" />
+        {/* Left tentacle */}
+        <path d="M442 480 C388 503 310 530 198 549 A100 100 0 1 0 323 625" />
+        {/* Center tentacle */}
+        <path d="M628 502 C570 556 490 645 421 698 A100 100 0 1 0 568 707" />
+      </g>
+      <g fill="currentColor">
+        <circle cx="417" cy="346" r="35" />
+        <circle cx="543" cy="346" r="35" />
+      </g>
+    </svg>
   );
 }
 

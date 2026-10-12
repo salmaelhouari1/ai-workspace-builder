@@ -7,9 +7,9 @@
 @theme inline {
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: "Instrument Serif", ui-serif, Georgia, serif;
-  --color-ai: oklch(0.62 0.12 62);
-  --color-ai-deep: oklch(0.45 0.09 52);
-  --color-moss: oklch(0.46 0.095 155);
+  --color-ai: #f6c9a8;
+  --color-ai-deep: #8f5125;
+  --color-moss: #7a9a7e;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -49,42 +49,45 @@
 
 /* CHANGE VALUES FOR THEME */
 :root {
-  /* OCIVO theme — warm paper, deep moss ink, amber for AI moments. */
-  --ai: oklch(0.62 0.12 62);
-  --ai-deep: oklch(0.45 0.09 52);
-  --moss: oklch(0.46 0.095 158);
+  /*
+   * OCIVO palette — Forest #2E3A32 (primary/text), Sage #7A9A7E (secondary),
+   * Sand #F5EDE4 (background), Stone #E8E6E1 (cards/borders), Peach #F6C9A8 (accent).
+   */
+  --ai: #f6c9a8; /* Peach — AI moments, dots, highlights */
+  --ai-deep: #8f5125; /* Peach, darkened for readable text (AA on Sand & Stone) */
+  --moss: #7a9a7e; /* Sage */
   --radius: 0.75rem;
-  --background: oklch(0.984 0.005 95);
-  --foreground: oklch(0.24 0.014 75);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.24 0.014 75);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.24 0.014 75);
-  --primary: oklch(0.44 0.085 158);
-  --primary-foreground: oklch(0.98 0.01 150);
-  --secondary: oklch(0.955 0.008 95);
-  --secondary-foreground: oklch(0.26 0.014 75);
-  --muted: oklch(0.962 0.006 95);
-  --muted-foreground: oklch(0.52 0.015 75);
-  --accent: oklch(0.945 0.012 95);
-  --accent-foreground: oklch(0.26 0.014 75);
+  --background: #f5ede4; /* Sand */
+  --foreground: #2e3a32; /* Forest */
+  --card: #e8e6e1; /* Stone */
+  --card-foreground: #2e3a32;
+  --popover: #e8e6e1;
+  --popover-foreground: #2e3a32;
+  --primary: #2e3a32; /* Forest */
+  --primary-foreground: #f5ede4; /* Sand */
+  --secondary: #7a9a7e; /* Sage */
+  --secondary-foreground: #1f2a22; /* Forest, darkened for AA on Sage */
+  --muted: #efece6; /* Sand, muted */
+  --muted-foreground: #62685f; /* Stone ink — AA on Sand */
+  --accent: #f6c9a8; /* Peach */
+  --accent-foreground: #2e3a32;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.915 0.007 90);
-  --input: oklch(0.9 0.007 90);
-  --ring: oklch(0.7 0.06 158);
-  --chart-1: oklch(0.46 0.095 158);
-  --chart-2: oklch(0.62 0.12 62);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.972 0.005 95);
-  --sidebar-foreground: oklch(0.38 0.014 75);
-  --sidebar-primary: oklch(0.44 0.085 158);
-  --sidebar-primary-foreground: oklch(0.98 0.01 150);
-  --sidebar-accent: oklch(0.938 0.009 95);
-  --sidebar-accent-foreground: oklch(0.26 0.014 75);
-  --sidebar-border: oklch(0.905 0.007 90);
-  --sidebar-ring: oklch(0.7 0.06 158);
+  --border: #d8d5ce; /* Stone, defined */
+  --input: #d8d5ce;
+  --ring: #7a9a7e; /* Sage */
+  --chart-1: #2e3a32; /* Forest */
+  --chart-2: #7a9a7e; /* Sage */
+  --chart-3: #f6c9a8; /* Peach */
+  --chart-4: #8f5125; /* Deep peach */
+  --chart-5: #a8b5a9; /* Sage, light */
+  --sidebar: #efece5; /* Sand–stone midpoint */
+  --sidebar-foreground: #2e3a32;
+  --sidebar-primary: #2e3a32;
+  --sidebar-primary-foreground: #f5ede4;
+  --sidebar-accent: #e2ded6; /* Stone hover */
+  --sidebar-accent-foreground: #2e3a32;
+  --sidebar-border: #ddd9d1;
+  --sidebar-ring: #7a9a7e;
 }
 
 .dark {

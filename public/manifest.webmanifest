@@ -1,11 +1,11 @@
 {
-  "name": "freebuff.com application",
-  "short_name": "freebuff.com",
-  "description": "freebuff.com application",
+  "name": "OCIVO — Your workspace builds itself",
+  "short_name": "OCIVO",
+  "description": "OCIVO — tell it what you're building and your workspace builds itself. Projects, tasks, goals and docs, organised by AI.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#f5ede4",
+  "theme_color": "#f5ede4",
   "icons": [
     {
       "src": "/logo.svg",
