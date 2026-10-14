@@ -210,16 +210,6 @@ export default function Landing() {
                 See it in action
               </Button>
             </motion.div>
-
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.6, delay: 0.34 }}
-              className="mt-6 text-sm text-muted-foreground"
-            >
-              Built for freelancers, creators, e-commerce and small teams — not
-              enterprises.
-            </motion.p>
           </div>
 
           {/* Product mock */}
