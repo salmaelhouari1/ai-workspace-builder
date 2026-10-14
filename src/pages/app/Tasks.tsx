@@ -11,10 +11,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 import { parseTask, relativeDayLabel, utcDayStart, DAY_MS } from "@/lib/nlp";
 import { cn } from "@/lib/utils";
 import {
+  CalendarClock,
   Check,
   CircleDashed,
   Flag,
@@ -23,6 +26,7 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
@@ -38,20 +42,67 @@ const PRIORITY_STYLE: Record<Priority, string> = {
   low: "text-muted-foreground/70",
 };
 
+const WEEKDAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+interface DueOption {
+  label: string;
+  value: number;
+  hint?: string;
+}
+
+/** Quick due-date choices: Today, Tomorrow, then each weekday by date. */
+function dueDateOptions(now: number): DueOption[] {
+  const today = utcDayStart(now);
+  const options: DueOption[] = [
+    { label: "Today", value: today },
+    { label: "Tomorrow", value: today + DAY_MS },
+  ];
+  for (let i = 2; i < 9; i++) {
+    const value = today + i * DAY_MS;
+    const d = new Date(value);
+    options.push({
+      label: WEEKDAY_NAMES[d.getUTCDay()],
+      value,
+      hint: d.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      }),
+    });
+  }
+  return options;
+}
+
 export default function Tasks() {
   const navigate = useNavigate();
   const tasks = useQuery(api.tasks.list);
   const projects = useQuery(api.projects.list);
+  const team = useQuery(api.team.list);
   const createTask = useMutation(api.tasks.create);
   const toggleTask = useMutation(api.tasks.toggle);
   const updateTask = useMutation(api.tasks.update);
   const deleteTask = useMutation(api.tasks.remove);
+  const addComment = useMutation(api.tasks.addComment);
+  const removeComment = useMutation(api.tasks.removeComment);
 
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
 
-  const preview = useMemo(() => (draft.trim() ? parseTask(draft.trim()) : null), [draft]);
+  const preview = useMemo(
+    () => (draft.trim() ? parseTask(draft.trim()) : null),
+    [draft],
+  );
 
   const submit = async () => {
     if (!draft.trim()) return;
@@ -80,13 +131,66 @@ export default function Tasks() {
     if (!tasks) return [];
     return tasks.filter((t) => {
       if (status !== "all" && t.status !== status) return false;
-      if (projectFilter !== "all" && t.projectId !== projectFilter) return false;
+      if (projectFilter !== "all" && t.projectId !== projectFilter)
+        return false;
       return true;
     });
   }, [tasks, status, projectFilter]);
 
   const now = Date.now();
   const today = utcDayStart(now);
+  const dateOptions = dueDateOptions(now);
+
+  const setDueDate = async (taskId: Id<"tasks">, value: number | undefined) => {
+    try {
+      await updateTask(
+        value === undefined
+          ? { taskId, clearDueDate: true }
+          : { taskId, dueDate: value },
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't update the date");
+    }
+  };
+
+  const setAssignee = async (
+    task: Doc<"tasks">,
+    person: { email: string; name?: string },
+    active: boolean,
+  ) => {
+    try {
+      await updateTask(
+        active
+          ? { taskId: task._id, clearAssignee: true }
+          : {
+              taskId: task._id,
+              assigneeEmail: person.email,
+              assigneeName: person.name,
+            },
+      );
+      toast.success(
+        active
+          ? "Task unassigned"
+          : `Assigned to ${person.name ?? person.email}`,
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't update the assignee");
+    }
+  };
+
+  const submitNote = async (taskId: Id<"tasks">) => {
+    const text = noteDraft.trim();
+    if (!text) return;
+    try {
+      await addComment({ taskId, text });
+      setNoteDraft("");
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't save the note");
+    }
+  };
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 pb-12 pt-8 md:px-8">
@@ -117,7 +221,7 @@ export default function Tasks() {
             onKeyDown={(e) => {
               if (e.key === "Enter") void submit();
             }}
-            placeholder='Remind me to send the proposal next Tuesday at 10'
+            placeholder="Remind me to send the proposal next Tuesday at 10"
             className="h-9 border-0 bg-transparent shadow-none focus-visible:ring-0"
           />
           <Button size="sm" onClick={submit} disabled={!draft.trim()}>
@@ -126,7 +230,9 @@ export default function Tasks() {
         </div>
         {preview && (
           <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-11 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">“{preview.title}”</span>
+            <span className="font-medium text-foreground">
+              “{preview.title}”
+            </span>
             {preview.dueDate && (
               <Badge variant="outline" className="text-[11px]">
                 {relativeDayLabel(preview.dueDate)}
@@ -134,7 +240,10 @@ export default function Tasks() {
               </Badge>
             )}
             {preview.priority === "high" && (
-              <Badge variant="outline" className="border-destructive/40 text-[11px] text-destructive">
+              <Badge
+                variant="outline"
+                className="border-destructive/40 text-[11px] text-destructive"
+              >
                 high priority
               </Badge>
             )}
@@ -145,7 +254,10 @@ export default function Tasks() {
       {/* Filters */}
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <div className="max-w-full overflow-x-auto pb-0.5">
-          <Tabs value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
+          <Tabs
+            value={status}
+            onValueChange={(v) => setStatus(v as StatusFilter)}
+          >
             <TabsList>
               <TabsTrigger value="all">All</TabsTrigger>
               <TabsTrigger value="todo">To do</TabsTrigger>
@@ -195,108 +307,386 @@ export default function Tasks() {
               const overdue =
                 !done && task.dueDate !== undefined && task.dueDate < today;
               return (
-                <li key={task._id} className="group flex items-center gap-3 px-4 py-3 md:px-5">
-                  <button
-                    aria-label={done ? "Reopen task" : "Complete task"}
-                    onClick={() =>
-                      void toggleTask({ taskId: task._id, done: !done }).catch(() =>
-                        toast.error("Couldn't update the task"),
-                      )
-                    }
-                    className={cn(
-                      "relative flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors before:absolute before:-inset-2.5 before:rounded-full before:content-['']",
-                      done
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border/80 text-transparent hover:border-primary hover:text-primary/40",
-                    )}
-                  >
-                    <Check className="size-3" />
-                  </button>
-
-                  <div className="min-w-0 flex-1">
-                    <p
+                <li key={task._id} className="group">
+                  <div className="flex items-center gap-3 px-4 py-3 md:px-5">
+                    <button
+                      aria-label={done ? "Reopen task" : "Complete task"}
+                      onClick={() =>
+                        void toggleTask({
+                          taskId: task._id,
+                          done: !done,
+                        }).catch(() => toast.error("Couldn't update the task"))
+                      }
                       className={cn(
-                        "truncate text-sm",
-                        done ? "text-muted-foreground line-through" : "text-foreground",
+                        "relative flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors before:absolute before:-inset-2.5 before:rounded-full before:content-['']",
+                        done
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border/80 text-transparent hover:border-primary hover:text-primary/40",
                       )}
                     >
-                      {task.title}
-                    </p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                      {task.projectName && (
-                        <button
-                          className="hover:text-primary"
-                          onClick={() => task.projectId && navigate(`/app/projects/${task.projectId}`)}
-                        >
-                          {task.projectName}
-                        </button>
-                      )}
-                      {task.status === "in_progress" && (
-                        <span className="text-primary">· in progress</span>
-                      )}
-                      {task.dueDate !== undefined && (
-                        <span className={overdue ? "font-medium text-destructive" : undefined}>
-                          · {relativeDayLabel(task.dueDate, now)}
-                          {task.dueTime ? ` ${task.dueTime}` : ""}
-                        </span>
-                      )}
+                      <Check className="size-3" />
+                    </button>
+
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={cn(
+                          "truncate text-sm",
+                          done
+                            ? "text-muted-foreground line-through"
+                            : "text-foreground",
+                        )}
+                      >
+                        {task.title}
+                      </p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                        {task.projectName && (
+                          <button
+                            className="hover:text-primary"
+                            onClick={() =>
+                              task.projectId &&
+                              navigate(`/app/projects/${task.projectId}`)
+                            }
+                          >
+                            {task.projectName}
+                          </button>
+                        )}
+                        {task.status === "in_progress" && (
+                          <span className="text-primary">· in progress</span>
+                        )}
+                        {task.dueDate !== undefined && (
+                          <span
+                            className={
+                              overdue
+                                ? "font-medium text-destructive"
+                                : undefined
+                            }
+                          >
+                            · {relativeDayLabel(task.dueDate, now)}
+                            {task.dueTime ? ` ${task.dueTime}` : ""}
+                          </span>
+                        )}
+                        {task.assigneeEmail && (
+                          <span
+                            className="flex items-center gap-1"
+                            title={`Assigned to ${task.assigneeEmail}`}
+                          >
+                            ·
+                            <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[8px] font-bold text-primary">
+                              {(
+                                task.assigneeName ??
+                                task.assigneeEmail.split("@")[0]
+                              )
+                                .trim()
+                                .charAt(0)
+                                .toUpperCase()}
+                            </span>
+                            <span className="max-w-[16ch] truncate">
+                              {task.assigneeName ??
+                                task.assigneeEmail.split("@")[0]}
+                            </span>
+                          </span>
+                        )}
+                        {(task.comments?.length ?? 0) > 0 && (
+                          <button
+                            className="hover:text-primary"
+                            onClick={() => {
+                              setNoteDraft("");
+                              setOpenId(openId === task._id ? null : task._id);
+                            }}
+                          >
+                            · {task.comments!.length} note
+                            {task.comments!.length === 1 ? "" : "s"}
+                          </button>
+                        )}
+                      </div>
                     </div>
+
+                    <Flag
+                      className={cn(
+                        "size-3.5 shrink-0",
+                        task.priority === "high"
+                          ? PRIORITY_STYLE.high
+                          : "opacity-0 group-hover:opacity-100 max-md:opacity-100",
+                        task.priority === "medium" && PRIORITY_STYLE.medium,
+                        task.priority === "low" && PRIORITY_STYLE.low,
+                      )}
+                      fill={task.priority !== "low" ? "currentColor" : "none"}
+                    />
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100 max-md:opacity-100"
+                        >
+                          <MoreHorizontal className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuLabel>Move to</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          disabled={task.status === "todo"}
+                          onClick={() =>
+                            void updateTask({
+                              taskId: task._id,
+                              status: "todo",
+                            })
+                          }
+                        >
+                          <CircleDashed className="mr-2 size-4" /> To do
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={task.status === "in_progress"}
+                          onClick={() =>
+                            void updateTask({
+                              taskId: task._id,
+                              status: "in_progress",
+                            })
+                          }
+                        >
+                          <ListChecks className="mr-2 size-4" /> In progress
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={done}
+                          onClick={() =>
+                            void updateTask({
+                              taskId: task._id,
+                              status: "done",
+                            })
+                          }
+                        >
+                          <Check className="mr-2 size-4" /> Done
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setNoteDraft("");
+                            setOpenId(openId === task._id ? null : task._id);
+                          }}
+                        >
+                          <CalendarClock className="mr-2 size-4" /> Date, person
+                          &amp; note
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() =>
+                            void deleteTask({ taskId: task._id }).then(
+                              () => toast.success("Task deleted"),
+                              () => toast.error("Couldn't delete the task"),
+                            )
+                          }
+                        >
+                          <Trash2 className="mr-2 size-4" /> Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
 
-                  <Flag
-                    className={cn(
-                      "size-3.5 shrink-0",
-                      task.priority === "high" ? PRIORITY_STYLE.high : "opacity-0 group-hover:opacity-100 max-md:opacity-100",
-                      task.priority === "medium" && PRIORITY_STYLE.medium,
-                      task.priority === "low" && PRIORITY_STYLE.low,
-                    )}
-                    fill={task.priority !== "low" ? "currentColor" : "none"}
-                  />
+                  {/* Quick edit: due date · person · note */}
+                  {openId === task._id && (
+                    <div className="space-y-3.5 border-t border-border/50 bg-muted/25 px-4 py-3.5 md:px-5">
+                      {/* Due date */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          Due date
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {dateOptions.map((opt) => {
+                            const active = task.dueDate === opt.value;
+                            return (
+                              <button
+                                key={opt.value}
+                                onClick={() =>
+                                  void setDueDate(task._id, opt.value)
+                                }
+                                className={cn(
+                                  "rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                                  active
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "border-border/80 text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                                )}
+                              >
+                                {opt.label}
+                                {opt.hint && (
+                                  <span
+                                    className={
+                                      active
+                                        ? "text-primary/70"
+                                        : "text-muted-foreground/70"
+                                    }
+                                  >
+                                    {" "}
+                                    · {opt.hint}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                          <button
+                            onClick={() => void setDueDate(task._id, undefined)}
+                            className={cn(
+                              "rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                              task.dueDate === undefined
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border/80 text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                            )}
+                          >
+                            No date
+                          </button>
+                        </div>
+                      </div>
 
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 data-[state=open]:opacity-100 max-md:opacity-100"
-                      >
-                        <MoreHorizontal className="size-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-44">
-                      <DropdownMenuLabel>Move to</DropdownMenuLabel>
-                      <DropdownMenuItem
-                        disabled={task.status === "todo"}
-                        onClick={() => void updateTask({ taskId: task._id, status: "todo" })}
-                      >
-                        <CircleDashed className="mr-2 size-4" /> To do
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={task.status === "in_progress"}
-                        onClick={() => void updateTask({ taskId: task._id, status: "in_progress" })}
-                      >
-                        <ListChecks className="mr-2 size-4" /> In progress
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={done}
-                        onClick={() => void updateTask({ taskId: task._id, status: "done" })}
-                      >
-                        <Check className="mr-2 size-4" /> Done
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        onClick={() =>
-                          void deleteTask({ taskId: task._id }).then(
-                            () => toast.success("Task deleted"),
-                            () => toast.error("Couldn't delete the task"),
-                          )
-                        }
-                      >
-                        <Trash2 className="mr-2 size-4" /> Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                      {/* Assignee */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          Assigned to
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {team === undefined ? (
+                            <Skeleton className="h-7 w-40" />
+                          ) : team.length <= 1 ? (
+                            <button
+                              onClick={() => navigate("/app/settings")}
+                              className="text-xs font-medium text-primary hover:underline"
+                            >
+                              Add people’s emails in Settings →
+                            </button>
+                          ) : (
+                            <>
+                              {team.map((person) => {
+                                const active =
+                                  task.assigneeEmail?.toLowerCase() ===
+                                  person.email;
+                                return (
+                                  <button
+                                    key={person.email}
+                                    onClick={() =>
+                                      void setAssignee(task, person, active)
+                                    }
+                                    title={person.email}
+                                    className={cn(
+                                      "flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors",
+                                      active
+                                        ? "border-primary bg-primary/10 text-primary"
+                                        : "border-border/80 text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                                    )}
+                                  >
+                                    <span
+                                      className={cn(
+                                        "flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold",
+                                        active
+                                          ? "bg-primary/20 text-primary"
+                                          : "bg-muted text-muted-foreground",
+                                      )}
+                                    >
+                                      {(person.name ?? person.email)
+                                        .trim()
+                                        .charAt(0)
+                                        .toUpperCase()}
+                                    </span>
+                                    <span className="truncate">
+                                      {person.name ??
+                                        person.email.split("@")[0]}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                              {task.assigneeEmail && (
+                                <button
+                                  onClick={() =>
+                                    void setAssignee(
+                                      task,
+                                      { email: task.assigneeEmail! },
+                                      true,
+                                    )
+                                  }
+                                  className="rounded-lg border border-border/80 px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+                                >
+                                  Unassign
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Note */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          Note{" "}
+                          <span className="font-normal">
+                            — just in case something didn’t go right
+                          </span>
+                        </p>
+                        {(task.comments?.length ?? 0) > 0 && (
+                          <ul className="mt-1.5 space-y-1.5">
+                            {task.comments!.map((c) => (
+                              <li
+                                key={c.id}
+                                className="flex items-start gap-2 rounded-lg border border-border/60 bg-card px-3 py-2"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[11px] font-medium text-muted-foreground">
+                                    {c.author} ·{" "}
+                                    {new Date(c.createdAt).toLocaleString(
+                                      undefined,
+                                      {
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      },
+                                    )}
+                                  </p>
+                                  <p className="mt-0.5 break-words whitespace-pre-wrap text-sm">
+                                    {c.text}
+                                  </p>
+                                </div>
+                                <button
+                                  aria-label="Delete note"
+                                  className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                                  onClick={() =>
+                                    void removeComment({
+                                      taskId: task._id,
+                                      commentId: c.id,
+                                    }).catch(() =>
+                                      toast.error("Couldn't delete the note"),
+                                    )
+                                  }
+                                >
+                                  <X className="size-3.5" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="mt-1.5 flex items-end gap-2">
+                          <Textarea
+                            value={noteDraft}
+                            onChange={(e) => setNoteDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                void submitNote(task._id);
+                              }
+                            }}
+                            rows={2}
+                            placeholder="Add a note…"
+                            className="min-h-[60px] flex-1 resize-none text-sm"
+                          />
+                          <Button
+                            size="sm"
+                            disabled={!noteDraft.trim()}
+                            onClick={() => void submitNote(task._id)}
+                          >
+                            Add note
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </li>
               );
             })}

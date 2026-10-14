@@ -3,8 +3,17 @@ import { mutation, query } from "./_generated/server";
 import { assertMember, requireWorkspace } from "./lib/auth";
 import { logActivity } from "./lib/activity";
 
-const priority = v.union(v.literal("low"), v.literal("medium"), v.literal("high"));
-const status = v.union(v.literal("todo"), v.literal("in_progress"), v.literal("done"));
+const priority = v.union(
+  v.literal("low"),
+  v.literal("medium"),
+  v.literal("high"),
+);
+const status = v.union(
+  v.literal("todo"),
+  v.literal("in_progress"),
+  v.literal("done"),
+);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** All tasks in the workspace; the client filters/groups for v1. */
 export const list = query({
@@ -21,10 +30,15 @@ export const list = query({
       .collect();
     const projectName = new Map(projects.map((p) => [p._id, p.name]));
     return tasks
-      .map((t) => ({ ...t, projectName: t.projectId ? projectName.get(t.projectId) : undefined }))
+      .map((t) => ({
+        ...t,
+        projectName: t.projectId ? projectName.get(t.projectId) : undefined,
+      }))
       .sort((a, b) => {
-        if (a.status === "done" !== (b.status === "done")) return a.status === "done" ? 1 : -1;
-        if (a.dueDate !== undefined && b.dueDate !== undefined) return a.dueDate - b.dueDate;
+        if ((a.status === "done") !== (b.status === "done"))
+          return a.status === "done" ? 1 : -1;
+        if (a.dueDate !== undefined && b.dueDate !== undefined)
+          return a.dueDate - b.dueDate;
         if (a.dueDate !== undefined) return -1;
         if (b.dueDate !== undefined) return 1;
         return b.createdAt - a.createdAt;
@@ -94,6 +108,9 @@ export const update = mutation({
     status: v.optional(status),
     projectId: v.optional(v.id("projects")),
     reason: v.optional(v.string()),
+    assigneeEmail: v.optional(v.string()),
+    assigneeName: v.optional(v.string()),
+    clearAssignee: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.taskId);
@@ -117,8 +134,58 @@ export const update = mutation({
     }
     if (args.projectId !== undefined) patch.projectId = args.projectId;
     if (args.reason !== undefined) patch.reason = args.reason;
+    if (args.clearAssignee) {
+      patch.assigneeEmail = undefined;
+      patch.assigneeName = undefined;
+    } else if (args.assigneeEmail !== undefined) {
+      const email = args.assigneeEmail.trim().toLowerCase();
+      if (!EMAIL_RE.test(email)) throw new Error("Invalid assignee email");
+      patch.assigneeEmail = email;
+      patch.assigneeName = args.assigneeName?.trim().slice(0, 120) || undefined;
+    }
 
     await ctx.db.patch(args.taskId, patch as never);
+    return { ok: true };
+  },
+});
+
+/** Attach a note/comment to a task — a trail of "what happened here". */
+export const addComment = mutation({
+  args: { taskId: v.id("tasks"), text: v.string() },
+  handler: async (ctx, args) => {
+    const task = await ctx.db.get(args.taskId);
+    if (!task) throw new Error("Task not found");
+    const userId = await assertMember(ctx, task.workspaceId);
+    const user = await ctx.db.get(userId);
+
+    const text = args.text.trim().slice(0, 2000);
+    if (!text) throw new Error("The note is empty");
+
+    const comment = {
+      id: crypto.randomUUID(),
+      text,
+      author: user?.name?.trim() || user?.email?.split("@")[0] || "Someone",
+      createdAt: Date.now(),
+    };
+    await ctx.db.patch(args.taskId, {
+      comments: [...(task.comments ?? []), comment],
+      updatedAt: Date.now(),
+    });
+    return comment;
+  },
+});
+
+/** Delete a note from a task. */
+export const removeComment = mutation({
+  args: { taskId: v.id("tasks"), commentId: v.string() },
+  handler: async (ctx, args) => {
+    const task = await ctx.db.get(args.taskId);
+    if (!task) throw new Error("Task not found");
+    await assertMember(ctx, task.workspaceId);
+    await ctx.db.patch(args.taskId, {
+      comments: (task.comments ?? []).filter((c) => c.id !== args.commentId),
+      updatedAt: Date.now(),
+    });
     return { ok: true };
   },
 });

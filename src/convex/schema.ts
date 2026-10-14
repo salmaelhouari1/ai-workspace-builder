@@ -77,6 +77,20 @@ const schema = defineSchema(
       .index("by_workspace", ["workspaceId"])
       .index("by_user", ["userId", "workspaceId"]),
 
+    // People the workspace owner added by email so tasks can be assigned
+    // to them. userId/name are filled in when the email already belongs to
+    // an OCIVO account — otherwise the email alone is enough to assign.
+    teamMembers: defineTable({
+      workspaceId: v.id("workspaces"),
+      email: v.string(),
+      name: v.optional(v.string()),
+      userId: v.optional(v.id("users")),
+      role: v.string(), // "member" (owner is derived from workspaces.ownerId)
+      createdAt: v.number(),
+    })
+      .index("by_workspace", ["workspaceId"])
+      .index("by_email", ["workspaceId", "email"]),
+
     projects: defineTable({
       workspaceId: v.id("workspaces"),
       name: v.string(),
@@ -107,6 +121,21 @@ const schema = defineSchema(
       dueTime: v.optional(v.string()),
       projectId: v.optional(v.id("projects")),
       tags: v.array(v.string()),
+      // Who this task is assigned to (a team member's email — works even
+      // before that person has an account). Name is a display snapshot.
+      assigneeEmail: v.optional(v.string()),
+      assigneeName: v.optional(v.string()),
+      // Per-task notes/comments — "just in case that didn't go correctly".
+      comments: v.optional(
+        v.array(
+          v.object({
+            id: v.string(),
+            text: v.string(),
+            author: v.string(),
+            createdAt: v.number(),
+          }),
+        ),
+      ),
       // The AI's "why this matters now" explanation shown on Home.
       reason: v.optional(v.string()),
       source: v.optional(v.string()), // "manual" | "ai" | "inbox" | "generated"

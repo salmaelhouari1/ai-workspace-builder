@@ -13,6 +13,9 @@ import {
   LogOut,
   Sparkles,
   UserRound,
+  UserPlus,
+  Users,
+  X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -26,6 +29,9 @@ export default function Settings() {
   const workspace = useQuery(api.workspaces.getForMe);
   const activity = useQuery(api.activity.recent);
   const updateWorkspace = useMutation(api.workspaces.update);
+  const team = useQuery(api.team.list);
+  const addTeamMember = useMutation(api.team.add);
+  const removeTeamMember = useMutation(api.team.remove);
 
   const [name, setName] = useState("");
   const [mainGoal, setMainGoal] = useState("");
@@ -34,6 +40,8 @@ export default function Settings() {
   const [stage, setStage] = useState("Getting started");
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     if (workspace && !dirty) {
@@ -66,6 +74,26 @@ export default function Settings() {
     }
   };
 
+  const submitMember = async () => {
+    const email = emailDraft.trim();
+    if (!email || adding) return;
+    setAdding(true);
+    try {
+      await addTeamMember({ email });
+      setEmailDraft("");
+      toast.success("Added to your team", {
+        description: `${email} can now be assigned tasks.`,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      toast.error(
+        msg.replace(/^.*Error:\s*/, "") || "Couldn't add that person",
+      );
+    } finally {
+      setAdding(false);
+    }
+  };
+
   if (workspace === undefined || workspace === null) {
     return (
       <div className="mx-auto w-full max-w-3xl px-4 py-8 md:px-8">
@@ -89,7 +117,10 @@ export default function Settings() {
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           <Building2 className="size-4 text-primary" />
           Workspace
-          <Badge variant="secondary" className="ml-auto text-[10px] font-medium">
+          <Badge
+            variant="secondary"
+            className="ml-auto text-[10px] font-medium"
+          >
             {typeDisplay(workspace.businessType)}
           </Badge>
         </h2>
@@ -188,6 +219,98 @@ export default function Settings() {
         </div>
       </section>
 
+      {/* Team */}
+      <section className="mt-5 rounded-2xl border border-border/70 bg-card p-5">
+        <h2 className="flex items-center gap-2 text-sm font-semibold">
+          <Users className="size-4 text-primary" />
+          Team
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            add emails · assign tasks to them
+          </span>
+        </h2>
+
+        <form
+          className="mt-4 flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submitMember();
+          }}
+        >
+          <Input
+            type="email"
+            value={emailDraft}
+            onChange={(e) => setEmailDraft(e.target.value)}
+            placeholder="teammate@company.com"
+            className="h-9 min-w-[200px] flex-1"
+          />
+          <Button
+            size="sm"
+            className="gap-1.5"
+            disabled={!emailDraft.trim() || adding}
+          >
+            <UserPlus className="size-3.5" />
+            {adding ? "Adding…" : "Add"}
+          </Button>
+        </form>
+
+        {team === undefined ? (
+          <div className="mt-3">
+            <Skeleton className="h-12 rounded-xl" />
+          </div>
+        ) : team.length <= 1 ? (
+          <p className="mt-3 rounded-xl border border-dashed px-3.5 py-4 text-center text-sm text-muted-foreground">
+            Just you so far. Add a teammate’s email above to start assigning
+            tasks to them.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {team.map((person) => (
+              <li
+                key={person.email}
+                className="flex items-center gap-3 rounded-xl border border-border/60 px-3.5 py-2.5"
+              >
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/12 text-xs font-bold text-primary">
+                  {(person.name ?? person.email).trim().charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0 flex-1 leading-tight">
+                  <p className="truncate text-sm font-medium">
+                    {person.name ?? person.email}
+                  </p>
+                  {person.name && (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {person.email}
+                    </p>
+                  )}
+                </div>
+                {person.role === "owner" ? (
+                  <Badge variant="secondary" className="text-[10px]">
+                    You
+                  </Badge>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 text-muted-foreground hover:text-destructive"
+                    aria-label={`Remove ${person.email}`}
+                    onClick={() => {
+                      if (!person.teamMemberId) return;
+                      void removeTeamMember({
+                        teamMemberId: person.teamMemberId,
+                      }).then(
+                        () => toast.success(`${person.email} removed`),
+                        () => toast.error("Couldn't remove them"),
+                      );
+                    }}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       {/* Account */}
       <section className="mt-5 rounded-2xl border border-border/70 bg-card p-5">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -196,8 +319,12 @@ export default function Settings() {
         </h2>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{user?.name ?? "Signed in"}</p>
-            <p className="truncate text-xs text-muted-foreground">{user?.email ?? "Session"}</p>
+            <p className="truncate text-sm font-medium">
+              {user?.name ?? "Signed in"}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {user?.email ?? "Session"}
+            </p>
           </div>
           <Button
             variant="outline"
@@ -243,7 +370,9 @@ export default function Settings() {
                   <span
                     className={cn(
                       "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md",
-                      entry.actor === "ai" ? "bg-ai/15 text-ai-deep" : "bg-muted text-muted-foreground",
+                      entry.actor === "ai"
+                        ? "bg-ai/15 text-ai-deep"
+                        : "bg-muted text-muted-foreground",
                     )}
                   >
                     {entry.actor === "ai" ? (
