@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { Navigate, Route, Routes } from "react-router";
 import AppShell from "./AppShell";
 import Assistant from "./Assistant";
+import CalendarPage from "./Calendar";
 import DocumentEditor from "./DocumentEditor";
 import Documents from "./Documents";
 import Goals from "./Goals";
@@ -45,6 +46,7 @@ export default function AppRoot() {
       <Route element={<AppShell businessType={workspace.businessType} />}>
         <Route index element={<Home />} />
         <Route path="tasks" element={<Tasks />} />
+        <Route path="calendar" element={<CalendarPage />} />
         <Route path="projects" element={<Projects />} />
         <Route path="projects/:id" element={<ProjectDetail />} />
         <Route path="inbox" element={<InboxPage />} />

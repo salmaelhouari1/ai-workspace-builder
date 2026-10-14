@@ -5,6 +5,7 @@
  */
 
 import {
+  CalendarDays,
   FileText,
   FolderKanban,
   Home,
@@ -28,6 +29,7 @@ const DEFAULT_LABELS: Record<string, string> = {
   home: "Home",
   inbox: "Inbox",
   tasks: "My Tasks",
+  calendar: "Calendar",
   projects: "Projects",
   documents: "Documents",
   goals: "Goals",
@@ -39,6 +41,7 @@ const ICONS: Record<string, LucideIcon> = {
   home: Home,
   inbox: Inbox,
   tasks: ListChecks,
+  calendar: CalendarDays,
   projects: FolderKanban,
   documents: FileText,
   goals: Target,
@@ -79,12 +82,22 @@ const TYPE_LABELS: Record<string, Record<string, string>> = {
   general: {},
 };
 
-const ORDER = ["home", "inbox", "tasks", "projects", "documents", "goals", "ai"];
+const ORDER = [
+  "home",
+  "inbox",
+  "tasks",
+  "calendar",
+  "projects",
+  "documents",
+  "goals",
+  "ai",
+];
 
 const ROUTES: Record<string, string> = {
   home: "/app",
   inbox: "/app/inbox",
   tasks: "/app/tasks",
+  calendar: "/app/calendar",
   projects: "/app/projects",
   documents: "/app/documents",
   goals: "/app/goals",

@@ -9,9 +9,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/use-auth";
-import { navEntries, settingsEntry, typeDisplay, type NavEntry } from "@/lib/modules";
+import {
+  navEntries,
+  settingsEntry,
+  typeDisplay,
+  type NavEntry,
+} from "@/lib/modules";
 import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import { useQuery } from "convex/react";
@@ -36,6 +47,7 @@ function useSectionTitle(pathname: string): string {
       "/app": "Home",
       "/app/inbox": "Inbox",
       "/app/tasks": "My Tasks",
+      "/app/calendar": "Calendar",
       "/app/projects": "Projects",
       "/app/documents": "Documents",
       "/app/goals": "Goals",
@@ -79,7 +91,9 @@ function NavItem({
         <span
           className={cn(
             "ml-auto rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
-            active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+            active
+              ? "bg-primary text-primary-foreground"
+              : "bg-muted text-muted-foreground",
           )}
         >
           {badge > 99 ? "99+" : badge}
@@ -115,10 +129,16 @@ export default function AppShell({ businessType }: { businessType: string }) {
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
   const isActive = (to: string) =>
-    to === "/app" ? location.pathname === "/app" : location.pathname.startsWith(to);
+    to === "/app"
+      ? location.pathname === "/app"
+      : location.pathname.startsWith(to);
 
   const badgeFor = (entry: NavEntry) =>
-    entry.badge === "inbox" ? badges?.inbox : entry.badge === "tasks" ? badges?.tasks : undefined;
+    entry.badge === "inbox"
+      ? badges?.inbox
+      : entry.badge === "tasks"
+        ? badges?.tasks
+        : undefined;
 
   const sidebarNav = (
     <nav className="flex flex-col gap-1 px-3">
@@ -134,12 +154,15 @@ export default function AppShell({ businessType }: { businessType: string }) {
     </nav>
   );
 
-  const userInitial = (user?.name ?? user?.email ?? "?").trim().charAt(0).toUpperCase();
+  const userInitial = (user?.name ?? user?.email ?? "?")
+    .trim()
+    .charAt(0)
+    .toUpperCase();
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
+    <div className="app-shell flex h-dvh overflow-hidden bg-background">
       {/* ---------- Desktop sidebar ---------- */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+      <aside className="no-print hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <BrandMark className="size-8" />
           <div className="min-w-0 leading-tight">
@@ -152,7 +175,9 @@ export default function AppShell({ businessType }: { businessType: string }) {
 
         <div className="mx-5 mb-3 rounded-xl border border-border/70 bg-card/70 px-3.5 py-2.5">
           <p className="truncate text-sm font-semibold text-foreground">
-            {user?.name?.split(" ")[0] ? `${user.name.split(" ")[0]}'s workspace` : "Your workspace"}
+            {user?.name?.split(" ")[0]
+              ? `${user.name.split(" ")[0]}'s workspace`
+              : "Your workspace"}
           </p>
           <p className="text-xs text-muted-foreground">Built by OCIVO</p>
         </div>
@@ -171,8 +196,12 @@ export default function AppShell({ businessType }: { businessType: string }) {
               {userInitial}
             </span>
             <div className="min-w-0 flex-1 leading-tight">
-              <p className="truncate text-sm font-medium">{user?.name ?? "You"}</p>
-              <p className="truncate text-xs text-muted-foreground">{user?.email ?? "Signed in"}</p>
+              <p className="truncate text-sm font-medium">
+                {user?.name ?? "You"}
+              </p>
+              <p className="truncate text-xs text-muted-foreground">
+                {user?.email ?? "Signed in"}
+              </p>
             </div>
             <Button
               variant="ghost"
@@ -192,11 +221,16 @@ export default function AppShell({ businessType }: { businessType: string }) {
 
       {/* ---------- Main column ---------- */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border/70 bg-card/60 px-3 backdrop-blur md:px-6">
+        <header className="no-print flex h-14 shrink-0 items-center gap-2 border-b border-border/70 bg-card/60 px-3 backdrop-blur md:px-6">
           {/* Mobile menu */}
           <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
+                aria-label="Open menu"
+              >
                 <Menu className="size-5" />
               </Button>
             </SheetTrigger>
@@ -211,13 +245,19 @@ export default function AppShell({ businessType }: { businessType: string }) {
                 {sidebarNav}
                 <div className="my-2 mx-5 border-t border-border/70" />
                 <div className="px-3">
-                  <NavItem entry={settings} active={isActive(settings.to)} onNavigate={() => setMenuOpen(false)} />
+                  <NavItem
+                    entry={settings}
+                    active={isActive(settings.to)}
+                    onNavigate={() => setMenuOpen(false)}
+                  />
                 </div>
               </div>
             </SheetContent>
           </Sheet>
 
-          <span className="font-display text-lg tracking-tight md:hidden">{title}</span>
+          <span className="font-display text-lg tracking-tight md:hidden">
+            {title}
+          </span>
 
           {/* Search trigger */}
           <button
@@ -293,11 +333,21 @@ export default function AppShell({ businessType }: { businessType: string }) {
         </main>
 
         {/* ---------- Mobile bottom nav (spec §21) ---------- */}
-        <nav className="flex shrink-0 border-t border-border/70 bg-card/90 px-2 pb-[env(safe-area-inset-bottom)] pt-1 backdrop-blur md:hidden">
+        <nav className="no-print flex shrink-0 border-t border-border/70 bg-card/90 px-2 pb-[env(safe-area-inset-bottom)] pt-1 backdrop-blur md:hidden">
           {[
             { key: "home", label: "Home", to: "/app", icon: Home },
-            { key: "tasks", label: "Tasks", to: "/app/tasks", icon: ListChecks },
-            { key: "projects", label: "Projects", to: "/app/projects", icon: FolderKanban },
+            {
+              key: "tasks",
+              label: "Tasks",
+              to: "/app/tasks",
+              icon: ListChecks,
+            },
+            {
+              key: "projects",
+              label: "Projects",
+              to: "/app/projects",
+              icon: FolderKanban,
+            },
             { key: "inbox", label: "Inbox", to: "/app/inbox", icon: Inbox },
             { key: "ai", label: "AI", to: "/app/ai", icon: Sparkles },
           ].map((item) => {

@@ -5,7 +5,8 @@
 
 /* DO NOT CHANGE */
 @theme inline {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-sans:
+    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: "Instrument Serif", ui-serif, Georgia, serif;
   --color-ai: #f6c9a8;
   --color-ai-deep: #8f5125;
@@ -154,5 +155,40 @@
   button:not([disabled]),
   [role="button"]:not([disabled]) {
     cursor: pointer;
+  }
+}
+
+/*
+ * Save as PDF (window.print): hide the app chrome and let the page — e.g. the
+ * monthly calendar — flow onto the sheet. Landscape suits a month grid.
+ */
+@media print {
+  @page {
+    size: landscape;
+    margin: 10mm;
+  }
+  html,
+  body {
+    height: auto !important;
+    background: #fff !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .app-shell,
+  .app-shell > div {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .app-shell main {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
   }
 }
