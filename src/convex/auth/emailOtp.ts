@@ -1,4 +1,5 @@
 import { Email } from "@convex-dev/auth/providers/Email";
+import { ConvexError } from "convex/values";
 import axios from "axios";
 import { RandomReader, generateRandomString } from "@oslojs/crypto/random";
 
@@ -49,17 +50,22 @@ function freebuffEmailOtpHeaders(): Record<string, string> {
 }
 
 // Never stringify the whole request error: it carries the request headers.
+// These are thrown as ConvexError so the message reaches the browser — plain
+// Error messages are redacted to "Server Error" on production deployments,
+// which would leave sign-in failures impossible to diagnose from the UI.
 function freebuffEmailOtpError(error: unknown): Error {
   const response = (
     error as { response?: { status?: number; data?: { error?: unknown } } }
   )?.response;
   if (response) {
     const detail =
-      typeof response.data?.error === "string" ? `: ${response.data.error}` : "";
-    return new Error(
+      typeof response.data?.error === "string"
+        ? `: ${response.data.error}`
+        : "";
+    return new ConvexError(
       `Could not send the sign-in code (HTTP ${response.status})${detail}`,
     );
   }
   const message = error instanceof Error ? error.message : String(error);
-  return new Error(`Could not send the sign-in code: ${message}`);
+  return new ConvexError(`Could not send the sign-in code: ${message}`);
 }

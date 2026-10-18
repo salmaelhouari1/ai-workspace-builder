@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireWorkspace } from "./lib/auth";
@@ -60,12 +60,14 @@ export const add = mutation({
 
     const email = args.email.trim().toLowerCase();
     if (!EMAIL_RE.test(email))
-      throw new Error("That doesn't look like an email address.");
+      throw new ConvexError("That doesn't look like an email address.");
 
     const workspace = await ctx.db.get(workspaceId);
     const owner = workspace ? await ctx.db.get(workspace.ownerId) : null;
     if (owner?.email?.toLowerCase() === email) {
-      throw new Error("That's your own email — you're already on the team.");
+      throw new ConvexError(
+        "That's your own email — you're already on the team.",
+      );
     }
 
     const existing = await ctx.db
@@ -74,7 +76,7 @@ export const add = mutation({
         q.eq("workspaceId", workspaceId).eq("email", email),
       )
       .first();
-    if (existing) throw new Error("They're already on your team.");
+    if (existing) throw new ConvexError("They're already on your team.");
 
     // Resolve a display name when the email already belongs to an account.
     const user = await ctx.db
