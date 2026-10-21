@@ -55,16 +55,25 @@ export const create = mutation({
     priority: v.optional(priority),
     status: v.optional(status),
     projectId: v.optional(v.id("projects")),
+    parentId: v.optional(v.id("tasks")),
     tags: v.optional(v.array(v.string())),
     reason: v.optional(v.string()),
     source: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { workspaceId } = await requireWorkspace(ctx);
+    if (args.title.trim().length === 0) throw new Error("Task needs a title");
     if (args.projectId) {
       const project = await ctx.db.get(args.projectId);
       if (!project || project.workspaceId !== workspaceId) {
         throw new Error("Unknown project");
+      }
+    }
+    // Subtasks: one level deep, same workspace as the parent.
+    if (args.parentId) {
+      const parent = await ctx.db.get(args.parentId);
+      if (!parent || parent.workspaceId !== workspaceId) {
+        throw new Error("Unknown parent task");
       }
     }
     const now = Date.now();
@@ -77,6 +86,7 @@ export const create = mutation({
       priority: args.priority ?? "medium",
       status: args.status ?? "todo",
       projectId: args.projectId,
+      parentId: args.parentId,
       tags: args.tags ?? [],
       reason: args.reason,
       source: args.source ?? "manual",
@@ -111,11 +121,21 @@ export const update = mutation({
     assigneeEmail: v.optional(v.string()),
     assigneeName: v.optional(v.string()),
     clearAssignee: v.optional(v.boolean()),
+    clearProject: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const task = await ctx.db.get(args.taskId);
     if (!task) throw new Error("Task not found");
     await assertMember(ctx, task.workspaceId);
+
+    // Moving a task into a project must target one of *this* workspace's
+    // projects — otherwise a guessed ID could cross-link workspaces.
+    if (args.projectId !== undefined) {
+      const project = await ctx.db.get(args.projectId);
+      if (!project || project.workspaceId !== task.workspaceId) {
+        throw new Error("Unknown project");
+      }
+    }
 
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.title !== undefined) patch.title = args.title.trim().slice(0, 300);
@@ -132,7 +152,8 @@ export const update = mutation({
       patch.status = args.status;
       patch.completedAt = args.status === "done" ? Date.now() : undefined;
     }
-    if (args.projectId !== undefined) patch.projectId = args.projectId;
+    if (args.clearProject) patch.projectId = undefined;
+    else if (args.projectId !== undefined) patch.projectId = args.projectId;
     if (args.reason !== undefined) patch.reason = args.reason;
     if (args.clearAssignee) {
       patch.assigneeEmail = undefined;
@@ -212,6 +233,12 @@ export const remove = mutation({
     const task = await ctx.db.get(args.taskId);
     if (!task) throw new Error("Task not found");
     await assertMember(ctx, task.workspaceId);
+    // Deleting a parent takes its subtasks with it — no orphans.
+    const children = await ctx.db
+      .query("tasks")
+      .withIndex("by_parent", (q) => q.eq("parentId", args.taskId))
+      .collect();
+    for (const child of children) await ctx.db.delete(child._id);
     await ctx.db.delete(args.taskId);
     return { ok: true };
   },

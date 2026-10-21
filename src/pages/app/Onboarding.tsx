@@ -14,17 +14,35 @@ import { detectBusinessType, guessBusinessName, type BusinessType } from "@/lib/
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  AlertCircle,
   ArrowLeft,
   ArrowRight,
   Check,
   Loader2,
+  RefreshCw,
   Sparkles,
   Wand2,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ConvexError } from "convex/values";
 import { useMutation, useQuery } from "convex/react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+
+const MIN_DESCRIPTION = 10;
+
+/**
+ * Turn a thrown error into something a person can act on. ConvexError data
+ * carries our real message; everything else falls back to a generic one
+ * (production redacts plain Error messages to "Server Error").
+ */
+function describeError(err: unknown): string {
+  if (err instanceof ConvexError && typeof err.data === "string") return err.data;
+  if (err instanceof ConvexError && typeof err.data?.message === "string") {
+    return err.data.message;
+  }
+  return "Something went wrong building your workspace. Your answers are safe — try again.";
+}
 
 const EXAMPLES = [
   "I'm a freelance graphic designer.",
@@ -75,6 +93,7 @@ export default function Onboarding() {
   const [stage, setStage] = useState(STAGES[1]);
   const [stageIndex, setStageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [building, setBuilding] = useState(false);
   const startedRef = useRef(false);
 
   // Returning users with a workspace skip onboarding entirely
@@ -84,6 +103,7 @@ export default function Onboarding() {
   }, [existingWorkspace, step, navigate]);
 
   const detected = useMemo(() => detectBusinessType(prompt), [prompt]);
+  const description = prompt.trim();
 
   const goStep2 = () => {
     const type = detected.type;
@@ -95,52 +115,56 @@ export default function Onboarding() {
     setStep(2);
   };
 
+  /** Run the real generation. Safe to call again after a failure. */
+  const build = async () => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    setBuilding(true);
+    setError(null);
+    try {
+      const result = await createWorkspace({
+        prompt: description || "A new business",
+        name: name.trim() || undefined,
+        businessType,
+        mainGoal: mainGoal.trim() || undefined,
+        teamSize,
+        stage,
+      });
+      // Let the animation breathe even when generation is instant.
+      await new Promise((r) => setTimeout(r, 950 * GENERATION_STEPS.length - 400));
+      setStageIndex(GENERATION_STEPS.length - 1);
+      await new Promise((r) => setTimeout(r, 700));
+      toast.success(
+        result.alreadyExisted
+          ? "Your workspace was already ready"
+          : "Your workspace is ready",
+        { description: "Projects, tasks, goals and docs — built for you." },
+      );
+      navigate("/app", { replace: true });
+    } catch (err) {
+      console.error("Workspace generation failed:", err);
+      setError(describeError(err));
+    } finally {
+      startedRef.current = false;
+      setBuilding(false);
+    }
+  };
+
   // Step 3: run the generation stage sequence + the real mutation.
   useEffect(() => {
-    if (step !== 3) return;
+    if (step !== 3 || error) return;
 
     const interval = window.setInterval(() => {
       setStageIndex((i) => (i < GENERATION_STEPS.length - 1 ? i + 1 : i));
     }, 950);
 
-    // The mutation runs exactly once, even under React StrictMode's double
-    // effects; the stage animation may restart freely.
-    if (!startedRef.current) {
-      startedRef.current = true;
-      (async () => {
-        try {
-          await createWorkspace({
-            prompt: prompt.trim() || "A new business",
-            name: name.trim() || undefined,
-            businessType,
-            mainGoal: mainGoal.trim() || undefined,
-            teamSize,
-            stage,
-          });
-          // Let the animation breathe even when generation is instant.
-          await new Promise((r) => setTimeout(r, 950 * GENERATION_STEPS.length - 400));
-          setStageIndex(GENERATION_STEPS.length - 1);
-          await new Promise((r) => setTimeout(r, 700));
-          toast.success("Your workspace is ready", {
-            description: "Projects, tasks, goals and docs — built for you.",
-          });
-          navigate("/app", { replace: true });
-        } catch (err) {
-          console.error(err);
-          if (err instanceof Error && /already have a workspace/i.test(err.message)) {
-            navigate("/app", { replace: true });
-            return;
-          }
-          setError("We couldn't build your workspace. Please try again.");
-          startedRef.current = false;
-        } finally {
-          window.clearInterval(interval);
-        }
-      })();
-    }
+    // The mutation runs exactly once per visit to step 3, even under React
+    // StrictMode's double effects; the stage animation may restart freely.
+    if (!startedRef.current && !error) void build();
 
     return () => window.clearInterval(interval);
-  }, [step, createWorkspace, prompt, name, businessType, mainGoal, teamSize, stage, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, error]);
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-background">
@@ -205,13 +229,22 @@ export default function Onboarding() {
                   </span>
                   <Button
                     onClick={goStep2}
-                    disabled={prompt.trim().length < 3}
+                    disabled={description.length < MIN_DESCRIPTION}
                     className="gap-2"
                   >
                     Continue
                     <ArrowRight className="size-4" />
                   </Button>
                 </div>
+                {prompt.trim().length > 0 &&
+                  description.length < MIN_DESCRIPTION && (
+                    <p className="mt-2 flex items-center gap-1.5 px-2 text-xs text-muted-foreground">
+                      <AlertCircle className="size-3.5" />
+                      Add a sentence or two ({MIN_DESCRIPTION - description.length} more
+                      character{MIN_DESCRIPTION - description.length === 1 ? "" : "s"}) so OCIVO can
+                      build the right workspace.
+                    </p>
+                  )}
               </div>
 
               <p className="mt-6 text-sm font-medium text-muted-foreground">
@@ -339,7 +372,7 @@ export default function Onboarding() {
                 <Button
                   className="gap-2"
                   onClick={() => setStep(3)}
-                  disabled={name.trim().length < 2 && prompt.trim().length < 3}
+                  disabled={name.trim().length < 2 && description.length < MIN_DESCRIPTION}
                 >
                   <Wand2 className="size-4" />
                   Build my workspace
@@ -399,19 +432,38 @@ export default function Onboarding() {
               </ul>
 
               {error && (
-                <div className="mt-6 max-w-sm">
-                  <p className="text-sm text-destructive">{error}</p>
-                  <Button
-                    variant="outline"
-                    className="mt-3"
-                    onClick={() => {
-                      setError(null);
-                      setStageIndex(0);
-                      setStep(2);
-                    }}
-                  >
-                    Try again
-                  </Button>
+                <div className="mt-6 max-w-sm rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-4 text-left">
+                  <p className="flex items-start gap-2 text-sm font-medium text-destructive">
+                    <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                    <span>{error}</span>
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={building}
+                      onClick={() => {
+                        setStageIndex(0);
+                        void build();
+                      }}
+                    >
+                      <RefreshCw className="size-3.5" />
+                      {building ? "Building…" : "Try again"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setError(null);
+                        setStep(2);
+                      }}
+                    >
+                      Change my answers
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Your answers are kept — nothing was lost.
+                  </p>
                 </div>
               )}
 

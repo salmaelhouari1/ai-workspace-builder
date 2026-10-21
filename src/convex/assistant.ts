@@ -55,7 +55,7 @@ function buildSnapshot(context: Context, question: string, focusDocId?: string):
     lines.push("GOALS:");
     for (const g of context.goals.slice(0, 8)) {
       lines.push(
-        `- [goal:${g.id}] ${g.title} | ${g.current ?? "—"}${g.unit ?? ""} of ${g.target ?? "—"}${g.unit ?? ""}${g.progress !== null ? ` (${g.progress}%)` : ""} | due ${g.deadline ?? "none"} | route /app/goals`,
+        `- [goal:${g.id}] ${g.title} | ${g.current ?? "—"}${g.unit ?? ""} of ${g.target ?? "—"}${g.unit ?? ""}${g.progress !== null ? ` (${g.progress}%)` : ""}${g.projects?.length ? ` | tracked by projects: ${g.projects.join(", ")}` : ""} | due ${g.deadline ?? "none"} | route /app/goals`,
       );
     }
   }

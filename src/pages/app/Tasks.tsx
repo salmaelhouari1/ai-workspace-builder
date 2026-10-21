@@ -94,10 +94,13 @@ export default function Tasks() {
   const removeComment = useMutation(api.tasks.removeComment);
 
   const [draft, setDraft] = useState("");
+  const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [openId, setOpenId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+  const [titleDraft, setTitleDraft] = useState("");
+  const [subtaskDraft, setSubtaskDraft] = useState("");
 
   const preview = useMemo(
     () => (draft.trim() ? parseTask(draft.trim()) : null),
@@ -129,13 +132,35 @@ export default function Tasks() {
 
   const filtered = useMemo(() => {
     if (!tasks) return [];
+    const q = search.trim().toLowerCase();
     return tasks.filter((t) => {
       if (status !== "all" && t.status !== status) return false;
       if (projectFilter !== "all" && t.projectId !== projectFilter)
         return false;
+      if (
+        q &&
+        !t.title.toLowerCase().includes(q) &&
+        !(t.description ?? "").toLowerCase().includes(q) &&
+        !(t.projectName ?? "").toLowerCase().includes(q)
+      )
+        return false;
       return true;
     });
-  }, [tasks, status, projectFilter]);
+  }, [tasks, status, projectFilter, search]);
+
+  // Top-level tasks only in the flat list; subtasks render under their parent.
+  const subtasksOf = useMemo(() => {
+    const map = new Map<string, typeof filtered>();
+    for (const t of filtered) {
+      if (!t.parentId) continue;
+      const list = map.get(t.parentId) ?? [];
+      list.push(t);
+      map.set(t.parentId, list);
+    }
+    return map;
+  }, [filtered]);
+  const roots = filtered.filter((t) => !t.parentId);
+  const openTask = tasks?.find((t) => t._id === openId);
 
   const now = Date.now();
   const today = utcDayStart(now);
@@ -190,6 +215,46 @@ export default function Tasks() {
       console.error(err);
       toast.error("Couldn't save the note");
     }
+  };
+
+  const submitTitle = async (taskId: Id<"tasks">) => {
+    const title = titleDraft.trim();
+    if (!title) return;
+    try {
+      await updateTask({ taskId, title });
+      toast.success("Task updated");
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't update the task");
+    }
+  };
+
+  const addSubtask = async (parent: Id<"tasks">) => {
+    const text = subtaskDraft.trim();
+    if (!text) return;
+    const parsed = parseTask(text);
+    try {
+      await createTask({
+        title: parsed.title,
+        dueDate: parsed.dueDate,
+        dueTime: parsed.dueTime,
+        priority: parsed.priority,
+        parentId: parent,
+        source: "manual",
+      });
+      setSubtaskDraft("");
+      toast.success("Subtask added");
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't add the subtask");
+    }
+  };
+
+  const togglePanel = (task: Doc<"tasks">) => {
+    setNoteDraft("");
+    setSubtaskDraft("");
+    setTitleDraft(task.title);
+    setOpenId(openId === task._id ? null : task._id);
   };
 
   return (
@@ -253,6 +318,26 @@ export default function Tasks() {
 
       {/* Filters */}
       <div className="mt-5 flex flex-wrap items-center gap-3">
+        <div
+          className="flex h-9 min-w-52 flex-1 items-center gap-2 rounded-lg border border-input bg-background px-2.5 focus-within:border-ring"
+        >
+          <Search className="size-3.5 shrink-0 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search tasks…"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+          />
+          {search && (
+            <button
+              aria-label="Clear search"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setSearch("")}
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
         <div className="max-w-full overflow-x-auto pb-0.5">
           <Tabs
             value={status}
@@ -289,7 +374,7 @@ export default function Tasks() {
             <Skeleton className="h-12" />
             <Skeleton className="h-12" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : roots.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-6 py-14 text-center">
             <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
               <ListChecks className="size-5" />
@@ -302,7 +387,7 @@ export default function Tasks() {
           </div>
         ) : (
           <ul className="divide-y divide-border/50">
-            {filtered.map((task) => {
+            {roots.map((task) => {
               const done = task.status === "done";
               const overdue =
                 !done && task.dueDate !== undefined && task.dueDate < today;
@@ -389,14 +474,17 @@ export default function Tasks() {
                         {(task.comments?.length ?? 0) > 0 && (
                           <button
                             className="hover:text-primary"
-                            onClick={() => {
-                              setNoteDraft("");
-                              setOpenId(openId === task._id ? null : task._id);
-                            }}
+                            onClick={() => togglePanel(task)}
                           >
                             · {task.comments!.length} note
                             {task.comments!.length === 1 ? "" : "s"}
                           </button>
+                        )}
+                        {(subtasksOf.get(task._id)?.length ?? 0) > 0 && (
+                          <span>
+                            · {subtasksOf.get(task._id)!.filter((s) => s.status === "done").length}/
+                            {subtasksOf.get(task._id)!.length} subtasks
+                          </span>
                         )}
                       </div>
                     </div>
@@ -460,13 +548,9 @@ export default function Tasks() {
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
-                          onClick={() => {
-                            setNoteDraft("");
-                            setOpenId(openId === task._id ? null : task._id);
-                          }}
+                          onClick={() => togglePanel(task)}
                         >
-                          <CalendarClock className="mr-2 size-4" /> Date, person
-                          &amp; note
+                          <CalendarClock className="mr-2 size-4" /> Edit task
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem

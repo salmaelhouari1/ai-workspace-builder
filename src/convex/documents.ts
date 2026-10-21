@@ -10,7 +10,17 @@ export const list = query({
       .query("documents")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
       .collect();
-    return docs.sort((a, b) => b.updatedAt - a.updatedAt);
+    const projects = await ctx.db
+      .query("projects")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+      .collect();
+    const projectName = new Map(projects.map((p) => [p._id, p.name]));
+    return docs
+      .map((d) => ({
+        ...d,
+        projectName: d.projectId ? projectName.get(d.projectId) : undefined,
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
   },
 });
 
@@ -20,7 +30,12 @@ export const get = query({
     const doc = await ctx.db.get(args.documentId);
     if (!doc) return null;
     await assertMember(ctx, doc.workspaceId);
-    return doc;
+    let projectName: string | undefined;
+    if (doc.projectId) {
+      const project = await ctx.db.get(doc.projectId);
+      projectName = project?.name;
+    }
+    return { ...doc, projectName };
   },
 });
 
@@ -34,6 +49,12 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const { workspaceId } = await requireWorkspace(ctx);
+    if (args.projectId) {
+      const project = await ctx.db.get(args.projectId);
+      if (!project || project.workspaceId !== workspaceId) {
+        throw new Error("Unknown project");
+      }
+    }
     const now = Date.now();
     return await ctx.db.insert("documents", {
       workspaceId,
@@ -53,15 +74,25 @@ export const update = mutation({
     title: v.optional(v.string()),
     content: v.optional(v.string()),
     category: v.optional(v.string()),
+    projectId: v.optional(v.id("projects")),
+    clearProject: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const doc = await ctx.db.get(args.documentId);
     if (!doc) throw new Error("Document not found");
     await assertMember(ctx, doc.workspaceId);
+    if (args.projectId !== undefined) {
+      const project = await ctx.db.get(args.projectId);
+      if (!project || project.workspaceId !== doc.workspaceId) {
+        throw new Error("Unknown project");
+      }
+    }
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.title !== undefined) patch.title = args.title.trim().slice(0, 200) || "Untitled";
     if (args.content !== undefined) patch.content = args.content;
     if (args.category !== undefined) patch.category = args.category.trim() || "Notes";
+    if (args.clearProject) patch.projectId = undefined;
+    else if (args.projectId !== undefined) patch.projectId = args.projectId;
     await ctx.db.patch(args.documentId, patch as never);
     return { ok: true };
   },

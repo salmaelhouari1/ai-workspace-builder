@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query } from "./_generated/server";
 import { currentUserWorkspace, requireWorkspace } from "./lib/auth";
@@ -43,6 +43,12 @@ export const navBadges = query({
 /**
  * Generate the whole workspace from what the user is building.
  * This is step 3 of onboarding: parse → structure → done in one transaction.
+ *
+ * Idempotent by design: if the user already has a workspace (a retried
+ * request, a lost response, a second tab), we return the existing one instead
+ * of failing — a retry must never block the user or duplicate their data.
+ * User-facing failures are ConvexErrors so the real reason reaches the
+ * browser in production, where plain Error messages are redacted.
  */
 export const create = mutation({
   args: {
@@ -58,16 +64,36 @@ export const create = mutation({
     // throw "Not authenticated" for every brand-new user here — so this one
     // mutation only requires a signed-in session.
     const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Not authenticated");
+    if (userId === null) {
+      throw new ConvexError(
+        "Your session expired — sign in again and we'll pick up where you left off.",
+      );
+    }
 
-    // v1: one workspace per user — onboarding runs once.
+    const prompt = args.prompt.trim();
+    if (prompt.length < 3) {
+      throw new ConvexError(
+        "Tell us a little more about what you're building.",
+      );
+    }
+    if (prompt.length > 4000) {
+      throw new ConvexError(
+        "That description is a bit long — keep it under 4,000 characters.",
+      );
+    }
+
+    // v1: one workspace per user. A repeated call (retry after a flaky
+    // network, double submit, second tab) returns the existing workspace so
+    // the client can simply continue into the app.
     const existing = await ctx.db
       .query("workspaceMembers")
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .first();
-    if (existing) throw new Error("You already have a workspace.");
+    if (existing) {
+      return { workspaceId: existing.workspaceId, alreadyExisted: true };
+    }
 
-    const detected = detectBusinessType(args.prompt || args.name || "");
+    const detected = detectBusinessType(prompt || args.name || "");
     const businessType = (
       args.businessType && BUSINESS_TYPES.includes(args.businessType)
         ? args.businessType
@@ -75,18 +101,18 @@ export const create = mutation({
     ) as BusinessType;
 
     const name =
-      args.name?.trim() ||
-      guessBusinessName(args.prompt || "") ||
+      args.name?.trim().slice(0, 100) ||
+      guessBusinessName(prompt) ||
       "My workspace";
 
     const now = Date.now();
     const workspaceId = await ctx.db.insert("workspaces", {
       name,
       businessType,
-      prompt: args.prompt,
-      mainGoal: args.mainGoal,
-      teamSize: args.teamSize,
-      stage: args.stage,
+      prompt: prompt.slice(0, 4000),
+      mainGoal: args.mainGoal?.trim().slice(0, 300) || undefined,
+      teamSize: args.teamSize?.trim().slice(0, 40) || undefined,
+      stage: args.stage?.trim().slice(0, 40) || undefined,
       ownerId: userId,
       modules: ALL_MODULES,
       onboardedAt: now,
@@ -172,7 +198,7 @@ export const create = mutation({
       route: "/app",
     });
 
-    return { workspaceId };
+    return { workspaceId, alreadyExisted: false };
   },
 });
 

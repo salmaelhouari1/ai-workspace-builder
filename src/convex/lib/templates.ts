@@ -142,7 +142,7 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             tasks: [
               { title: "Prepare tomorrow's content", reason: CONTENT_TASK_REASON, tags: ["content"] },
               { title: "Message 3 warm leads", dueIn: 2, priority: "high" },
-              { title: "Ask2 happy clients for a testimonial", dueIn: 5, priority: "low" },
+              { title: "Ask 2 happy clients for a testimonial", dueIn: 5, priority: "low" },
             ],
           },
         ],
@@ -262,7 +262,7 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             tasks: [
               { title: "Prepare tomorrow's content", reason: CONTENT_TASK_REASON, tags: ["content"] },
               { title: "Write launch announcement", dueIn: 12, priority: "medium", tags: ["content"] },
-              { title: "Line up5 beta testers", dueIn: 5, priority: "high" },
+              { title: "Line up 5 beta testers", dueIn: 5, priority: "high" },
             ],
           },
           {
@@ -272,12 +272,12 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             priority: "medium",
             tasks: [
               { title: "Follow up with 3 leads", dueIn: 0, priority: "high", reason: FOLLOW_UP_REASON },
-              { title: "Book3 customer interviews", dueIn: 6, priority: "medium" },
+              { title: "Book 3 customer interviews", dueIn: 6, priority: "medium" },
             ],
           },
         ],
         goals: [
-          { title: "Reach100 signups", target: 100, current: 34, unit: "users", deadlineIn: 60 },
+          { title: "Reach 100 signups", target: 100, current: 34, unit: "users", deadlineIn: 60 },
           { title: "Ship the MVP", target: 100, current: 40, unit: "%", deadlineIn: 45 },
         ],
         documents: [
@@ -318,7 +318,7 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             priority: "medium",
             tasks: [
               { title: "Follow up with 3 leads", dueIn: 0, priority: "medium", reason: FOLLOW_UP_REASON, description: "Brand collabs and partnerships waiting for a reply." },
-              { title: "Pitch2 collaboration ideas", dueIn: 5, priority: "medium" },
+              { title: "Pitch 2 collaboration ideas", dueIn: 5, priority: "medium" },
               { title: "Repurpose top post into a short", dueIn: 2, priority: "low", tags: ["content"] },
             ],
           },
@@ -328,14 +328,14 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "planned",
             priority: "low",
             tasks: [
-              { title: "List3 sponsorship opportunities", dueIn: 7, priority: "medium" },
+              { title: "List 3 sponsorship opportunities", dueIn: 7, priority: "medium" },
               { title: "Sketch the first digital product", dueIn: 14, priority: "low" },
             ],
           },
         ],
         goals: [
           { title: "Reach10,000 followers", target: 10000, current: 6400, unit: "followers", deadlineIn: 90 },
-          { title: "Publish3x per week", target: 12, current: 5, unit: "posts", deadlineIn: 28 },
+          { title: "Publish 3x per week", target: 12, current: 5, unit: "posts", deadlineIn: 28 },
         ],
         documents: [
           overviewDoc(input, "A creator business built on a consistent publishing rhythm and a loyal audience."),
@@ -370,7 +370,7 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             priority: "high",
             tasks: [
               { title: "Follow up with 3 leads", dueIn: 0, priority: "high", reason: FOLLOW_UP_REASON },
-              { title: "Send2 proposals out", dueIn: 2, priority: "high" },
+              { title: "Send 2 proposals out", dueIn: 2, priority: "high" },
               { title: "Qualify new inquiries", dueIn: 1, priority: "medium" },
             ],
           },
@@ -386,7 +386,7 @@ function seedFor(input: SeedInput): WorkspaceSeed {
           },
         ],
         goals: [
-          { title: "Sign2 new retainers this month", target: 2, current: 0, unit: "retainers", deadlineIn: 24 },
+          { title: "Sign 2 new retainers this month", target: 2, current: 0, unit: "retainers", deadlineIn: 24 },
           { title: "Reach €20,000 monthly revenue", target: 20000, current: 14500, unit: "€", deadlineIn: 45 },
         ],
         documents: [
@@ -414,7 +414,7 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             tasks: [
               { title: "Follow up with 3 leads", dueIn: 0, priority: "high", reason: FOLLOW_UP_REASON },
               { title: "Finish the landing page", dueIn: 1, priority: "high", status: "in_progress" },
-              { title: "Talk to5 potential customers", dueIn: 7, priority: "high" },
+              { title: "Talk to 5 potential customers", dueIn: 7, priority: "high" },
               { title: "Define the first offer", dueIn: 4, priority: "medium" },
             ],
           },
@@ -442,7 +442,7 @@ function seedFor(input: SeedInput): WorkspaceSeed {
         ],
         goals: [
           { title: "Reach €10,000 revenue", target: 10000, current: 6400, unit: "€", deadlineIn: 60 },
-          { title: "Get first10 customers", target: 10, current: 3, unit: "customers", deadlineIn: 45 },
+          { title: "Get first 10 customers", target: 10, current: 3, unit: "customers", deadlineIn: 45 },
         ],
         documents: [
           overviewDoc(

@@ -75,6 +75,11 @@ export const process = mutation({
     if (!item) throw new Error("Inbox item not found");
     const { workspaceId } = await requireWorkspace(ctx);
     if (item.workspaceId !== workspaceId) throw new Error("Unauthorized");
+    // Only pending items can be processed — a second submit (double click,
+    // two tabs) must not create the same tasks twice.
+    if (item.status !== "pending") {
+      throw new Error("This note was already processed.");
+    }
 
     const selected = args.entries.filter((e) => e.include !== false);
     const now = Date.now();

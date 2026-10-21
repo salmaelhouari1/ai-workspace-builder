@@ -114,13 +114,30 @@ export const dashboard = query({
       .slice(0, 4);
 
     // ---- Goals ------------------------------------------------------------
+    const projectById = new Map(projects.map((p) => [p._id, p]));
     const goalItems = goals
       .filter((g) => g.status === "active")
       .map((g) => {
-        const progress =
+        // Manual numbers win; linked projects provide real derived progress.
+        const manual =
           g.target && g.target > 0 && g.current !== undefined
             ? Math.min(100, Math.round((g.current / g.target) * 100))
             : null;
+        let derived: number | null = null;
+        if (manual === null && g.projectIds?.length) {
+          let done = 0;
+          let total = 0;
+          for (const id of g.projectIds) {
+            const own = tasks.filter((t) => t.projectId === id);
+            done += own.filter((t) => t.status === "done").length;
+            total += own.length;
+          }
+          derived = total > 0 ? Math.round((done / total) * 100) : null;
+        }
+        const progress = manual ?? derived;
+        const linkedProjectNames = (g.projectIds ?? [])
+          .map((id) => projectById.get(id)?.name)
+          .filter((n): n is string => Boolean(n));
         let note: string | null = null;
         if (progress !== null && g.deadline && g.createdAt) {
           const total = g.deadline - g.createdAt;
@@ -149,6 +166,7 @@ export const dashboard = query({
           deadline: g.deadline,
           progress,
           note,
+          linkedProjectNames,
         };
       })
       .slice(0, 3);

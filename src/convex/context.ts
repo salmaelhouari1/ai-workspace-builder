@@ -78,19 +78,36 @@ export const workspaceContext = query({
       };
     });
 
-    const goalItems = goals.map((g) => ({
-      id: g._id as string,
-      title: g.title,
-      current: g.current ?? null,
-      target: g.target ?? null,
-      unit: g.unit ?? null,
-      deadlineTs: g.deadline ?? null,
-      deadline: g.deadline ? relativeDayPhrase(g.deadline, now).replace(/\.$/, "") : null,
-      progress:
+    const goalItems = goals.map((g) => {
+      const manual =
         g.target && g.target > 0 && g.current !== undefined
           ? Math.min(100, Math.round((g.current / g.target) * 100))
-          : null,
-    }));
+          : null;
+      let derived: number | null = null;
+      if (manual === null && g.projectIds?.length) {
+        let done = 0;
+        let total = 0;
+        for (const id of g.projectIds) {
+          const own = allTasks.filter((t) => t.projectId === id);
+          done += own.filter((t) => t.status === "done").length;
+          total += own.length;
+        }
+        derived = total > 0 ? Math.round((done / total) * 100) : null;
+      }
+      return {
+        id: g._id as string,
+        title: g.title,
+        current: g.current ?? null,
+        target: g.target ?? null,
+        unit: g.unit ?? null,
+        deadlineTs: g.deadline ?? null,
+        deadline: g.deadline ? relativeDayPhrase(g.deadline, now).replace(/\.$/, "") : null,
+        progress: manual ?? derived,
+        projects: (g.projectIds ?? [])
+          .map((id) => projectName.get(id))
+          .filter((n): n is string => Boolean(n)),
+      };
+    });
 
     const docItems = docs.map((d) => ({
       id: d._id as string,

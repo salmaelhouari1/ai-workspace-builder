@@ -120,6 +120,8 @@ const schema = defineSchema(
       // Optional wall-clock label parsed from natural language, e.g. "10:00".
       dueTime: v.optional(v.string()),
       projectId: v.optional(v.id("projects")),
+      // Subtasks: a task may live under exactly one parent task.
+      parentId: v.optional(v.id("tasks")),
       tags: v.array(v.string()),
       // Who this task is assigned to (a team member's email — works even
       // before that person has an account). Name is a display snapshot.
@@ -141,11 +143,10 @@ const schema = defineSchema(
       source: v.optional(v.string()), // "manual" | "ai" | "inbox" | "generated"
       createdAt: v.number(),
       updatedAt: v.number(),
-      completedAt: v.optional(v.number()),
-    })
-      .index("by_workspace", ["workspaceId"])
+      completedAt: v.optional(v.number()),    }).index("by_workspace", ["workspaceId"])
       .index("by_workspace_status", ["workspaceId", "status"])
-      .index("by_project", ["projectId"]),
+      .index("by_project", ["projectId"])
+      .index("by_parent", ["parentId"]),
 
     goals: defineTable({
       workspaceId: v.id("workspaces"),
@@ -156,6 +157,10 @@ const schema = defineSchema(
       unit: v.optional(v.string()), // "€", "$", "%", "clients"…
       deadline: v.optional(v.number()),
       status: v.union(v.literal("active"), v.literal("done")),
+      // Projects that contribute real progress to this goal — completed vs
+      // total tasks across them drives the progress bar when no manual
+      // current/target is set. Optional so existing goals stay valid.
+      projectIds: v.optional(v.array(v.id("projects"))),
       createdAt: v.number(),
       updatedAt: v.number(),
     }).index("by_workspace", ["workspaceId"]),
