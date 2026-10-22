@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Markdown } from "@/components/Markdown";
 import { ProposalPreview } from "@/components/ProposalPreview";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import type { Proposal } from "@/convex/assistant";
 import { cn } from "@/lib/utils";
 import {
@@ -28,6 +29,24 @@ const AI_COMMANDS: { key: AiCommand; label: string }[] = [
   { key: "plan", label: "Action plan" },
 ];
 
+const TOOLBAR_ITEMS: {
+  label: string;
+  before: string;
+  after?: string;
+  block?: boolean;
+}[] = [
+  { label: "H1", before: "# ", block: true },
+  { label: "H2", before: "## ", block: true },
+  { label: "B", before: "**", after: "**" },
+  { label: "I", before: "*", after: "*" },
+  { label: "• list", before: "- ", block: true },
+  { label: "☑ task", before: "- [ ] ", block: true },
+  { label: "1.", before: "1. ", block: true },
+  { label: "“ quote", before: "> ", block: true },
+  { label: "</>", before: "```\n", after: "\n```" },
+  { label: "✦ callout", before: "> [!ai] ", block: true },
+];
+
 const INSTRUCTIONS: Record<AiCommand, string> = {
   summary: "Summarize this document in a few tight bullet points.",
   tasks: "Extract every action item from this document as tasks.",
@@ -43,7 +62,11 @@ interface AiResult {
 export default function DocumentEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const doc = useQuery(api.documents.get, id ? { documentId: id as never } : "skip");
+  const doc = useQuery(
+    api.documents.get,
+    id ? { documentId: id as never } : "skip",
+  );
+  const projects = useQuery(api.projects.list);
   const updateDoc = useMutation(api.documents.update);
   const deleteDoc = useMutation(api.documents.remove);
   const chat = useAction(api.assistant.chat);
@@ -59,14 +82,17 @@ export default function DocumentEditor() {
   const saveTimer = useRef<number | null>(null);
 
   // Local mirror so typing stays instant; Convex reconciles in the background.
-  const docId = doc?._id;
-  useEffect(() => {
+  // When a different doc loads, re-seed the drafts — the "adjust state during
+  // render" pattern, so no effect (and no flicker) needed.
+  const docId = doc?._id ?? null;
+  const [seededId, setSeededId] = useState<string | null>(null);
+  if (docId !== seededId) {
+    setSeededId(docId);
     if (doc) {
       setContent(doc.content);
       setTitleDraft(doc.title);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docId]);
+  }
 
   // Debounced autosave.
   const scheduleSave = (content: string) => {
@@ -101,7 +127,12 @@ export default function DocumentEditor() {
       next = content.slice(0, lineStart) + before + content.slice(lineStart);
       caret = start + before.length;
     } else {
-      next = content.slice(0, start) + before + selected + after + content.slice(end);
+      next =
+        content.slice(0, start) +
+        before +
+        selected +
+        after +
+        content.slice(end);
       caret = start + before.length + selected.length + after.length;
     }
 
@@ -159,7 +190,11 @@ export default function DocumentEditor() {
     return (
       <div className="mx-auto w-full max-w-4xl px-4 py-16 text-center md:px-8">
         <p className="font-medium">Document not found</p>
-        <Button className="mt-4" variant="outline" onClick={() => navigate("/app/documents")}>
+        <Button
+          className="mt-4"
+          variant="outline"
+          onClick={() => navigate("/app/documents")}
+        >
           Back to documents
         </Button>
       </div>
@@ -176,7 +211,40 @@ export default function DocumentEditor() {
           <ArrowLeft className="size-4" />
           Documents
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {(projects?.length ?? 0) > 0 && (
+            <select
+              value={doc.projectId ?? "none"}
+              onChange={(e) => {
+                const value = e.target.value;
+                void updateDoc(
+                  value === "none"
+                    ? { documentId: doc._id, clearProject: true }
+                    : {
+                        documentId: doc._id,
+                        projectId: value as Id<"projects">,
+                      },
+                )
+                  .then(() =>
+                    toast.success(
+                      value === "none"
+                        ? "Unlinked from project"
+                        : "Linked to project",
+                    ),
+                  )
+                  .catch(() => toast.error("Couldn't update the project link"));
+              }}
+              className="h-7 max-w-[11rem] rounded-full border border-input bg-background px-2 text-xs text-muted-foreground outline-none focus:border-ring"
+              aria-label="Link to project"
+            >
+              <option value="none">No project</option>
+              {projects?.map((p) => (
+                <option key={p._id} value={p._id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
           <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
             {doc.category}
           </span>
@@ -202,8 +270,8 @@ export default function DocumentEditor() {
         onChange={(e) => setTitleDraft(e.target.value)}
         onBlur={() => {
           if (titleDraft !== doc.title) {
-            void updateDoc({ documentId: doc._id, title: titleDraft }).catch(() =>
-              toast.error("Couldn't save the title"),
+            void updateDoc({ documentId: doc._id, title: titleDraft }).catch(
+              () => toast.error("Couldn't save the title"),
             );
           }
         }}
@@ -213,21 +281,10 @@ export default function DocumentEditor() {
 
       {/* Toolbar */}
       <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-border/70 bg-card px-2 py-1.5">
-        {[
-          { label: "H1", action: () => insert("# ", "", true) },
-          { label: "H2", action: () => insert("## ", "", true) },
-          { label: "B", action: () => insert("**", "**") },
-          { label: "I", action: () => insert("*", "*") },
-          { label: "• list", action: () => insert("- ", "", true) },
-          { label: "☑ task", action: () => insert("- [ ] ", "", true) },
-          { label: "1.", action: () => insert("1. ", "", true) },
-          { label: "“ quote", action: () => insert("> ", "", true) },
-          { label: "</>", action: () => insert("```\n", "\n```") },
-          { label: "✦ callout", action: () => insert("> [!ai] ", "", true) },
-        ].map((btn) => (
+        {TOOLBAR_ITEMS.map((btn) => (
           <button
             key={btn.label}
-            onClick={btn.action}
+            onClick={() => insert(btn.before, btn.after, btn.block)}
             className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             {btn.label}
@@ -235,7 +292,10 @@ export default function DocumentEditor() {
         ))}
 
         <div className="ml-auto">
-          <Tabs value={view} onValueChange={(v) => setView(v as "write" | "preview")}>
+          <Tabs
+            value={view}
+            onValueChange={(v) => setView(v as "write" | "preview")}
+          >
             <TabsList className="h-8">
               <TabsTrigger value="write" className="text-xs">
                 Write
@@ -292,7 +352,10 @@ export default function DocumentEditor() {
               Close
             </Button>
           </div>
-          <Markdown content={aiResult.answer} className="mt-2 text-foreground/90" />
+          <Markdown
+            content={aiResult.answer}
+            className="mt-2 text-foreground/90"
+          />
           {aiResult.proposal && (
             <ProposalPreview
               proposal={aiResult.proposal}
@@ -327,14 +390,17 @@ export default function DocumentEditor() {
             {content.trim() ? (
               <Markdown content={content} />
             ) : (
-              <p className="text-sm text-muted-foreground">Nothing to preview yet.</p>
+              <p className="text-sm text-muted-foreground">
+                Nothing to preview yet.
+              </p>
             )}
           </div>
         )}
       </div>
 
       <p className="mt-2 text-right text-xs text-muted-foreground">
-        Saved automatically · {new Date(doc.updatedAt).toLocaleTimeString([], {
+        Saved automatically ·{" "}
+        {new Date(doc.updatedAt).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
         })}

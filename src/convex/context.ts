@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { currentUserWorkspace } from "./lib/auth";
-import { relativeDayPhrase, utcDayStart, DAY_MS } from "../lib/nlp";
+import { relativeDayPhrase, utcDayStart } from "../lib/nlp";
 
 /**
  * Contextual retrieval for the assistant (spec §24).
@@ -17,16 +17,32 @@ export const workspaceContext = query({
     if (!session) return null;
     const { workspaceId } = session;
 
-    const [workspace, allTasks, projects, goals, docs, inbox] = await Promise.all([
-      ctx.db.get(workspaceId),
-      ctx.db.query("tasks").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect(),
-      ctx.db.query("projects").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect(),
-      ctx.db.query("goals").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect(),
-      ctx.db.query("documents").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect(),
-      ctx.db.query("inboxItems").withIndex("by_workspace_status", (q) =>
-        q.eq("workspaceId", workspaceId).eq("status", "pending"),
-      ).collect(),
-    ]);
+    const [workspace, allTasks, projects, goals, docs, inbox] =
+      await Promise.all([
+        ctx.db.get(workspaceId),
+        ctx.db
+          .query("tasks")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+          .collect(),
+        ctx.db
+          .query("projects")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+          .collect(),
+        ctx.db
+          .query("goals")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+          .collect(),
+        ctx.db
+          .query("documents")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+          .collect(),
+        ctx.db
+          .query("inboxItems")
+          .withIndex("by_workspace_status", (q) =>
+            q.eq("workspaceId", workspaceId).eq("status", "pending"),
+          )
+          .collect(),
+      ]);
 
     const now = Date.now();
     const today = utcDayStart(now);
@@ -37,8 +53,10 @@ export const workspaceContext = query({
 
     const tasks = [...open, ...done.slice(-8)]
       .sort((a, b) => {
-        if ((a.status === "done") !== (b.status === "done")) return a.status === "done" ? 1 : -1;
-        if (a.dueDate !== undefined && b.dueDate !== undefined) return a.dueDate - b.dueDate;
+        if ((a.status === "done") !== (b.status === "done"))
+          return a.status === "done" ? 1 : -1;
+        if (a.dueDate !== undefined && b.dueDate !== undefined)
+          return a.dueDate - b.dueDate;
         if (a.dueDate !== undefined) return -1;
         if (b.dueDate !== undefined) return 1;
         return b.createdAt - a.createdAt;
@@ -54,8 +72,9 @@ export const workspaceContext = query({
           t.dueDate !== undefined
             ? `${relativeDayPhrase(t.dueDate, now).replace(/\.$/, "")}${t.dueTime ? `, ${t.dueTime}` : ""}`
             : null,
-        overdue: t.dueDate !== undefined && t.dueDate < today && t.status !== "done",
-        project: t.projectId ? projectName.get(t.projectId) ?? null : null,
+        overdue:
+          t.dueDate !== undefined && t.dueDate < today && t.status !== "done",
+        project: t.projectId ? (projectName.get(t.projectId) ?? null) : null,
         reason: t.reason ?? null,
         tags: t.tags,
       }));
@@ -71,7 +90,9 @@ export const workspaceContext = query({
         description: p.description ?? null,
         status: p.status,
         deadlineTs: p.deadline ?? null,
-        deadline: p.deadline ? relativeDayPhrase(p.deadline, now).replace(/\.$/, "") : null,
+        deadline: p.deadline
+          ? relativeDayPhrase(p.deadline, now).replace(/\.$/, "")
+          : null,
         progress: own.length ? Math.round((doneCount / own.length) * 100) : 0,
         doneTasks: doneCount,
         totalTasks: own.length,
@@ -101,7 +122,9 @@ export const workspaceContext = query({
         target: g.target ?? null,
         unit: g.unit ?? null,
         deadlineTs: g.deadline ?? null,
-        deadline: g.deadline ? relativeDayPhrase(g.deadline, now).replace(/\.$/, "") : null,
+        deadline: g.deadline
+          ? relativeDayPhrase(g.deadline, now).replace(/\.$/, "")
+          : null,
         progress: manual ?? derived,
         projects: (g.projectIds ?? [])
           .map((id) => projectName.get(id))
@@ -131,7 +154,10 @@ export const workspaceContext = query({
       pendingInbox: inbox.length,
       today: new Date(today).toISOString().slice(0, 10),
       // helper for the action: resolve due strings when proposals come back
-      taskTitles: [...taskById.entries()].map(([id, t]) => ({ id, title: t.title })),
+      taskTitles: [...taskById.entries()].map(([id, t]) => ({
+        id,
+        title: t.title,
+      })),
     };
   },
 });
@@ -143,10 +169,13 @@ export const conversationHistory = query({
     const session = await currentUserWorkspace(ctx);
     if (!session) return null;
     const conversation = await ctx.db.get(args.conversationId);
-    if (!conversation || conversation.workspaceId !== session.workspaceId) return null;
+    if (!conversation || conversation.workspaceId !== session.workspaceId)
+      return null;
     const messages = await ctx.db
       .query("aiMessages")
-      .withIndex("by_conversation", (q) => q.eq("conversationId", args.conversationId))
+      .withIndex("by_conversation", (q) =>
+        q.eq("conversationId", args.conversationId),
+      )
       .collect();
     return messages.sort((a, b) => a.createdAt - b.createdAt);
   },

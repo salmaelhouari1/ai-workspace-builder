@@ -88,9 +88,11 @@ export const update = mutation({
       }
     }
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
-    if (args.title !== undefined) patch.title = args.title.trim().slice(0, 200) || "Untitled";
+    if (args.title !== undefined)
+      patch.title = args.title.trim().slice(0, 200) || "Untitled";
     if (args.content !== undefined) patch.content = args.content;
-    if (args.category !== undefined) patch.category = args.category.trim() || "Notes";
+    if (args.category !== undefined)
+      patch.category = args.category.trim() || "Notes";
     if (args.clearProject) patch.projectId = undefined;
     else if (args.projectId !== undefined) patch.projectId = args.projectId;
     await ctx.db.patch(args.documentId, patch as never);

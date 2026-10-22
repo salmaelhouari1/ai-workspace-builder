@@ -19,10 +19,22 @@ export const dashboard = query({
     const [workspace, user, tasks, projects, goals, inbox] = await Promise.all([
       ctx.db.get(workspaceId),
       ctx.db.get(userId),
-      ctx.db.query("tasks").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect(),
-      ctx.db.query("projects").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect(),
-      ctx.db.query("goals").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect(),
-      ctx.db.query("inboxItems").withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId)).collect(),
+      ctx.db
+        .query("tasks")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .collect(),
+      ctx.db
+        .query("projects")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .collect(),
+      ctx.db
+        .query("goals")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .collect(),
+      ctx.db
+        .query("inboxItems")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .collect(),
     ]);
 
     const now = Date.now();
@@ -32,20 +44,25 @@ export const dashboard = query({
 
     // Is any content actually scheduled in the next 7 days?
     const contentExists = open.some(
-      (t) => (t.tags ?? []).includes("content") || /content|post|video|newsletter|reel|tweet/i.test(t.title),
+      (t) =>
+        (t.tags ?? []).includes("content") ||
+        /content|post|video|newsletter|reel|tweet/i.test(t.title),
     );
     const contentScheduled = open.some(
       (t) =>
         t.dueDate !== undefined &&
         t.dueDate >= today &&
         t.dueDate <= today + 7 * DAY_MS &&
-        ((t.tags ?? []).includes("content") || /content|post|video|newsletter|reel|tweet/i.test(t.title)),
+        ((t.tags ?? []).includes("content") ||
+          /content|post|video|newsletter|reel|tweet/i.test(t.title)),
     );
 
     const SENTINEL = "content-nothing-scheduled";
 
     const reasonFor = (t: (typeof tasks)[number]): string => {
-      const projectNameStr = t.projectId ? projectName.get(t.projectId) : undefined;
+      const projectNameStr = t.projectId
+        ? projectName.get(t.projectId)
+        : undefined;
       if (t.dueDate !== undefined && t.dueDate < today) {
         return relativeDayPhrase(t.dueDate, now);
       }
@@ -63,7 +80,9 @@ export const dashboard = query({
       if (t.reason) return t.reason;
       if (t.dueDate !== undefined) return relativeDayPhrase(t.dueDate, now);
       if (t.priority === "high") {
-        return projectNameStr ? `Top priority in ${projectNameStr}.` : "High priority.";
+        return projectNameStr
+          ? `Top priority in ${projectNameStr}.`
+          : "High priority.";
       }
       return "Suggested by OCIVO.";
     };
@@ -147,7 +166,9 @@ export const dashboard = query({
               Math.max(0, Math.round(((now - g.createdAt) / total) * 100)),
             );
             const delta = expected - progress;
-            const month = new Date(g.deadline).toLocaleDateString(undefined, { month: "long" });
+            const month = new Date(g.deadline).toLocaleDateString(undefined, {
+              month: "long",
+            });
             if (delta >= 4) {
               note = `You're currently ${delta}% behind the pace required to reach your ${month} goal.`;
             } else if (delta <= -4) {
@@ -195,7 +216,11 @@ export const dashboard = query({
       }
     }
     for (const p of projects) {
-      if (p.deadline !== undefined && p.deadline >= today && p.status !== "done") {
+      if (
+        p.deadline !== undefined &&
+        p.deadline >= today &&
+        p.status !== "done"
+      ) {
         upcoming.push({
           key: `p-${p._id}`,
           label: p.name,
@@ -207,8 +232,17 @@ export const dashboard = query({
       }
     }
     for (const g of goals) {
-      if (g.deadline !== undefined && g.deadline >= today && g.status !== "active") continue;
-      if (g.deadline !== undefined && g.deadline >= today && g.status === "active") {
+      if (
+        g.deadline !== undefined &&
+        g.deadline >= today &&
+        g.status !== "active"
+      )
+        continue;
+      if (
+        g.deadline !== undefined &&
+        g.deadline >= today &&
+        g.status === "active"
+      ) {
         upcoming.push({
           key: `g-${g._id}`,
           label: g.title,
@@ -227,11 +261,18 @@ export const dashboard = query({
       text: string;
       tone: "warn" | "info" | "good";
       route?: string;
-      action?: { kind: "organize"; projectId: string; projectIdName: string; count: number };
+      action?: {
+        kind: "organize";
+        projectId: string;
+        projectIdName: string;
+        count: number;
+      };
     };
     const insights: Insight[] = [];
 
-    const overdueTasks = open.filter((t) => t.dueDate !== undefined && t.dueDate < today);
+    const overdueTasks = open.filter(
+      (t) => t.dueDate !== undefined && t.dueDate < today,
+    );
     if (overdueTasks.length) {
       const counts = new Map<string, number>();
       for (const t of overdueTasks) {
@@ -255,10 +296,15 @@ export const dashboard = query({
     if (orphans.length >= 3) {
       let best: { id: string; name: string; count: number } | null = null;
       for (const p of projects) {
-        const tokens = p.name.toLowerCase().split(/[^a-z0-9]+/).filter((x) => x.length > 3);
+        const tokens = p.name
+          .toLowerCase()
+          .split(/[^a-z0-9]+/)
+          .filter((x) => x.length > 3);
         if (!tokens.length) continue;
         const count = orphans.filter((t) =>
-          tokens.some((tok) => `${t.title} ${t.description ?? ""}`.toLowerCase().includes(tok)),
+          tokens.some((tok) =>
+            `${t.title} ${t.description ?? ""}`.toLowerCase().includes(tok),
+          ),
         ).length;
         if (count >= 3 && (!best || count > best.count)) {
           best = { id: p._id, name: p.name, count };
@@ -269,7 +315,12 @@ export const dashboard = query({
           id: "organize",
           text: `You have ${best.count} tasks that appear to belong to your ${best.name} project.`,
           tone: "info",
-          action: { kind: "organize", projectId: best.id, projectIdName: best.name, count: best.count },
+          action: {
+            kind: "organize",
+            projectId: best.id,
+            projectIdName: best.name,
+            count: best.count,
+          },
         });
       } else {
         insights.push({
@@ -301,7 +352,10 @@ export const dashboard = query({
     }
 
     const dueSoon = open.filter(
-      (t) => t.dueDate !== undefined && t.dueDate >= today && t.dueDate <= today + 7 * DAY_MS,
+      (t) =>
+        t.dueDate !== undefined &&
+        t.dueDate >= today &&
+        t.dueDate <= today + 7 * DAY_MS,
     );
     if (!dueSoon.length && open.length && insights.length < 3) {
       insights.push({

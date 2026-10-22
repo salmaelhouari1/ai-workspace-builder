@@ -3,10 +3,21 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { mutation, query } from "./_generated/server";
 import { currentUserWorkspace, requireWorkspace } from "./lib/auth";
 import { buildSeed, seedDayStart, ALL_MODULES } from "./lib/templates";
-import { detectBusinessType, guessBusinessName, type BusinessType } from "../lib/nlp";
+import {
+  detectBusinessType,
+  guessBusinessName,
+  type BusinessType,
+} from "../lib/nlp";
 import { logActivity } from "./lib/activity";
 
-const BUSINESS_TYPES = ["freelance", "ecommerce", "saas", "creator", "agency", "general"];
+const BUSINESS_TYPES = [
+  "freelance",
+  "ecommerce",
+  "saas",
+  "creator",
+  "agency",
+  "general",
+];
 
 /** The signed-in user's workspace, or null when they haven't onboarded yet. */
 export const getForMe = query({
@@ -33,7 +44,9 @@ export const navBadges = query({
       .collect();
     const tasks = await ctx.db
       .query("tasks")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", session.workspaceId))
+      .withIndex("by_workspace", (q) =>
+        q.eq("workspaceId", session.workspaceId),
+      )
       .collect();
     const openCount = tasks.filter((t) => t.status !== "done").length;
     return { inbox: pending.length, tasks: openCount };
@@ -216,8 +229,9 @@ export const update = mutation({
     const workspace = await ctx.db.get(workspaceId);
     if (!workspace) throw new Error("Workspace not found");
 
-    const patch: Record<string, unknown> = { };
-    if (args.name !== undefined && args.name.trim()) patch.name = args.name.trim();
+    const patch: Record<string, unknown> = {};
+    if (args.name !== undefined && args.name.trim())
+      patch.name = args.name.trim();
     if (args.mainGoal !== undefined) patch.mainGoal = args.mainGoal;
     if (args.teamSize !== undefined) patch.teamSize = args.teamSize;
     if (args.stage !== undefined) patch.stage = args.stage;
@@ -227,7 +241,8 @@ export const update = mutation({
     ) {
       patch.businessType = args.businessType;
     }
-    if (Object.keys(patch).length) await ctx.db.patch(workspaceId, patch as never);
+    if (Object.keys(patch).length)
+      await ctx.db.patch(workspaceId, patch as never);
     return { ok: true };
   },
 });

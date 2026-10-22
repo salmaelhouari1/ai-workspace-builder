@@ -1,17 +1,34 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
-import { parseTask, relativeDayLabel, utcDayStart, DAY_MS } from "@/lib/nlp";
+import {
+  parseTask,
+  relativeDayLabel,
+  localDayStart,
+  utcDayStart,
+} from "@/lib/nlp";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   ArrowRight,
   CalendarDays,
   Check,
+  FileText,
   ListChecks,
+  Pencil,
   Plus,
   Sparkles,
 } from "lucide-react";
@@ -31,16 +48,29 @@ const COLUMNS: { key: TaskStatus; label: string }[] = [
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const project = useQuery(api.projects.get, id ? { projectId: id as never } : "skip");
+  const project = useQuery(
+    api.projects.get,
+    id ? { projectId: id as never } : "skip",
+  );
   const createTask = useMutation(api.tasks.create);
   const toggleTask = useMutation(api.tasks.toggle);
   const updateTask = useMutation(api.tasks.update);
   const updateProject = useMutation(api.projects.update);
+  const createDoc = useMutation(api.documents.create);
 
   const [draft, setDraft] = useState("");
   const [view, setView] = useState<"list" | "board">("list");
+  const [editOpen, setEditOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [descDraft, setDescDraft] = useState("");
+  const [deadlineDraft, setDeadlineDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [now] = useState(() => Date.now());
 
-  const preview = useMemo(() => (draft.trim() ? parseTask(draft.trim()) : null), [draft]);
+  const preview = useMemo(
+    () => (draft.trim() ? parseTask(draft.trim()) : null),
+    [draft],
+  );
 
   if (project === undefined) {
     return (
@@ -56,14 +86,17 @@ export default function ProjectDetail() {
     return (
       <div className="mx-auto w-full max-w-4xl px-4 py-16 text-center md:px-8">
         <p className="font-medium">Project not found</p>
-        <Button className="mt-4" variant="outline" onClick={() => navigate("/app/projects")}>
+        <Button
+          className="mt-4"
+          variant="outline"
+          onClick={() => navigate("/app/projects")}
+        >
           Back to projects
         </Button>
       </div>
     );
   }
 
-  const now = Date.now();
   const today = utcDayStart(now);
 
   const addTask = async () => {
@@ -86,13 +119,79 @@ export default function ProjectDetail() {
     }
   };
 
-  const advance = (taskId: TaskStatus extends never ? never : string, current: TaskStatus) => {
+  const openEdit = () => {
+    setNameDraft(project.name);
+    setDescDraft(project.description ?? "");
+    setDeadlineDraft(
+      project.deadline
+        ? new Date(project.deadline).toISOString().slice(0, 10)
+        : "",
+    );
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    if (!nameDraft.trim()) return;
+    setSaving(true);
+    try {
+      const deadlineTs = deadlineDraft
+        ? localDayStart(new Date(`${deadlineDraft}T00:00:00`))
+        : undefined;
+      await updateProject(
+        deadlineTs === undefined
+          ? {
+              projectId: project._id,
+              name: nameDraft.trim(),
+              description: descDraft.trim() || undefined,
+              clearDeadline: true,
+            }
+          : {
+              projectId: project._id,
+              name: nameDraft.trim(),
+              description: descDraft.trim() || undefined,
+              deadline: deadlineTs,
+            },
+      );
+      toast.success("Project updated");
+      setEditOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't update the project");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addDocument = async () => {
+    try {
+      const docId = await createDoc({
+        title: `${project.name} notes`,
+        category: "Project",
+        projectId: project._id,
+        content: `# ${project.name} notes\n\n`,
+      });
+      navigate(`/app/documents/${docId}`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't create the document");
+    }
+  };
+
+  const advance = (
+    taskId: TaskStatus extends never ? never : string,
+    current: TaskStatus,
+  ) => {
     const next: TaskStatus =
-      current === "todo" ? "in_progress" : current === "in_progress" ? "done" : "todo";
+      current === "todo"
+        ? "in_progress"
+        : current === "in_progress"
+          ? "done"
+          : "todo";
     void updateTask({ taskId: taskId as never, status: next });
   };
 
-  const tasksByStatus = (status: TaskStatus) => project.tasks.filter((t) => t.status === status);
+  const tasksByStatus = (status: TaskStatus) =>
+    project.tasks.filter((t) => t.status === status);
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 pb-12 pt-6 md:px-8">
@@ -107,13 +206,19 @@ export default function ProjectDetail() {
       <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="font-display text-3xl tracking-tight">{project.name}</h1>
+            <h1 className="font-display text-3xl tracking-tight">
+              {project.name}
+            </h1>
             <select
               value={project.status}
               onChange={(e) =>
                 void updateProject({
                   projectId: project._id,
-                  status: e.target.value as "planned" | "active" | "paused" | "done",
+                  status: e.target.value as
+                    | "planned"
+                    | "active"
+                    | "paused"
+                    | "done",
                 })
               }
               className="h-7 rounded-full border border-primary/25 bg-primary/10 px-2.5 text-xs font-medium text-primary outline-none"
@@ -123,6 +228,15 @@ export default function ProjectDetail() {
               <option value="paused">Paused</option>
               <option value="done">Done</option>
             </select>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+              onClick={openEdit}
+            >
+              <Pencil className="size-3" />
+              Edit
+            </Button>
           </div>
           {project.description && (
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
@@ -140,7 +254,9 @@ export default function ProjectDetail() {
                 {relativeDayLabel(project.deadline, now)}
               </span>
             )}
-            <span className="font-medium text-foreground">{project.progress}%</span>
+            <span className="font-medium text-foreground">
+              {project.progress}%
+            </span>
           </div>
           <div className="mt-3 h-1.5 max-w-sm overflow-hidden rounded-full bg-muted">
             <div
@@ -150,7 +266,10 @@ export default function ProjectDetail() {
           </div>
         </div>
 
-        <Tabs value={view} onValueChange={(v) => setView(v as "list" | "board")}>
+        <Tabs
+          value={view}
+          onValueChange={(v) => setView(v as "list" | "board")}
+        >
           <TabsList>
             <TabsTrigger value="list">List</TabsTrigger>
             <TabsTrigger value="board">Board</TabsTrigger>
@@ -168,7 +287,13 @@ export default function ProjectDetail() {
           placeholder={`Add a task to ${project.name} — try "tomorrow at 9"`}
           className="h-8 border-0 bg-transparent shadow-none focus-visible:ring-0"
         />
-        <Button size="sm" variant="outline" className="h-7" onClick={addTask} disabled={!draft.trim()}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7"
+          onClick={addTask}
+          disabled={!draft.trim()}
+        >
           Add
         </Button>
       </div>
@@ -193,12 +318,18 @@ export default function ProjectDetail() {
             <ul className="divide-y divide-border/50">
               {project.tasks.map((task) => {
                 const done = task.status === "done";
-                const overdue = !done && task.dueDate !== undefined && task.dueDate < today;
+                const overdue =
+                  !done && task.dueDate !== undefined && task.dueDate < today;
                 return (
-                  <li key={task._id} className="flex items-center gap-3 px-4 py-3 md:px-5">
+                  <li
+                    key={task._id}
+                    className="flex items-center gap-3 px-4 py-3 md:px-5"
+                  >
                     <button
                       aria-label={done ? "Reopen" : "Complete"}
-                      onClick={() => void toggleTask({ taskId: task._id, done: !done })}
+                      onClick={() =>
+                        void toggleTask({ taskId: task._id, done: !done })
+                      }
                       className={cn(
                         "flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors",
                         done
@@ -217,13 +348,17 @@ export default function ProjectDetail() {
                       {task.title}
                     </span>
                     {task.status === "in_progress" && (
-                      <Badge className="border-0 bg-primary/12 text-primary">in progress</Badge>
+                      <Badge className="border-0 bg-primary/12 text-primary">
+                        in progress
+                      </Badge>
                     )}
                     {task.dueDate !== undefined && (
                       <span
                         className={cn(
                           "text-xs",
-                          overdue ? "font-medium text-destructive" : "text-muted-foreground",
+                          overdue
+                            ? "font-medium text-destructive"
+                            : "text-muted-foreground",
                         )}
                       >
                         {relativeDayLabel(task.dueDate, now)}
@@ -258,12 +393,19 @@ export default function ProjectDetail() {
                       key={task._id}
                       className="group rounded-xl border border-border/70 bg-card p-3 text-sm shadow-sm"
                     >
-                      <p className={cn(task.status === "done" && "text-muted-foreground line-through")}>
+                      <p
+                        className={cn(
+                          task.status === "done" &&
+                            "text-muted-foreground line-through",
+                        )}
+                      >
                         {task.title}
                       </p>
                       <div className="mt-2 flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">
-                          {task.dueDate !== undefined ? relativeDayLabel(task.dueDate, now) : "No date"}
+                          {task.dueDate !== undefined
+                            ? relativeDayLabel(task.dueDate, now)
+                            : "No date"}
                         </span>
                         <button
                           onClick={() => advance(task._id, task.status)}
@@ -276,7 +418,9 @@ export default function ProjectDetail() {
                     </div>
                   ))}
                   {!items.length && (
-                    <p className="px-1 py-3 text-xs text-muted-foreground">Empty</p>
+                    <p className="px-1 py-3 text-xs text-muted-foreground">
+                      Empty
+                    </p>
                   )}
                 </div>
               </div>
@@ -285,10 +429,59 @@ export default function ProjectDetail() {
         </div>
       )}
 
+      {/* Related documents */}
+      <section className="mt-8">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Documents
+          </h2>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1.5 px-2 text-xs"
+            onClick={() => void addDocument()}
+          >
+            <Plus className="size-3" />
+            New document
+          </Button>
+        </div>
+        {project.documents.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Nothing linked yet — keep project notes, briefs or recaps here.
+          </p>
+        ) : (
+          <ul className="mt-2.5 grid gap-2 sm:grid-cols-2">
+            {project.documents.map((d) => (
+              <li key={d._id}>
+                <button
+                  onClick={() => navigate(`/app/documents/${d._id}`)}
+                  className="group flex w-full items-center gap-2.5 rounded-xl border border-border/70 bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/30"
+                >
+                  <FileText className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium group-hover:text-primary">
+                      {d.title}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {d.category} · edited{" "}
+                      {new Date(d.updatedAt).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <div className="mt-8 flex items-center gap-2 rounded-xl border border-dashed border-ai/40 bg-ai/5 px-4 py-3 text-sm text-muted-foreground">
         <Sparkles className="size-4 shrink-0 text-ai-deep" />
         <span>
-          Ask OCIVO to plan this project: “Create a launch plan for {project.name}”.
+          Ask OCIVO to plan this project: “Create a launch plan for{" "}
+          {project.name}”.
         </span>
         <Button
           size="sm"
@@ -299,6 +492,57 @@ export default function ProjectDetail() {
           Open
         </Button>
       </div>
+
+      {/* Edit project */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit project</DialogTitle>
+            <DialogDescription>
+              Rename it, adjust the description or move the deadline.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => e.key === "Enter" && void saveEdit()}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-desc">Description</Label>
+              <Textarea
+                id="edit-desc"
+                value={descDraft}
+                onChange={(e) => setDescDraft(e.target.value)}
+                rows={3}
+                placeholder="What does done look like?"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-deadline">Deadline</Label>
+              <Input
+                id="edit-deadline"
+                type="date"
+                value={deadlineDraft}
+                onChange={(e) => setDeadlineDraft(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveEdit} disabled={!nameDraft.trim() || saving}>
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

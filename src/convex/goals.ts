@@ -76,10 +76,21 @@ export const list = query({
             }
           }
         }
-        return { ...g, progress, note, linkedProjects, progressSource: manual !== null ? "manual" : derived !== null ? "projects" : null };
+        return {
+          ...g,
+          progress,
+          note,
+          linkedProjects,
+          progressSource:
+            manual !== null ? "manual" : derived !== null ? "projects" : null,
+        };
       })
       .sort((a, b) =>
-        a.status === b.status ? a.createdAt - b.createdAt : a.status === "active" ? -1 : 1,
+        a.status === b.status
+          ? a.createdAt - b.createdAt
+          : a.status === "active"
+            ? -1
+            : 1,
       );
   },
 });

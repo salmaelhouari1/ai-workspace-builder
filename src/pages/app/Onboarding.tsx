@@ -10,7 +10,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { api } from "@/convex/_generated/api";
-import { detectBusinessType, guessBusinessName, type BusinessType } from "@/lib/nlp";
+import {
+  detectBusinessType,
+  guessBusinessName,
+  type BusinessType,
+} from "@/lib/nlp";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -37,7 +41,8 @@ const MIN_DESCRIPTION = 10;
  * (production redacts plain Error messages to "Server Error").
  */
 function describeError(err: unknown): string {
-  if (err instanceof ConvexError && typeof err.data === "string") return err.data;
+  if (err instanceof ConvexError && typeof err.data === "string")
+    return err.data;
   if (err instanceof ConvexError && typeof err.data?.message === "string") {
     return err.data.message;
   }
@@ -131,7 +136,9 @@ export default function Onboarding() {
         stage,
       });
       // Let the animation breathe even when generation is instant.
-      await new Promise((r) => setTimeout(r, 950 * GENERATION_STEPS.length - 400));
+      await new Promise((r) =>
+        setTimeout(r, 950 * GENERATION_STEPS.length - 400),
+      );
       setStageIndex(GENERATION_STEPS.length - 1);
       await new Promise((r) => setTimeout(r, 700));
       toast.success(
@@ -179,7 +186,10 @@ export default function Onboarding() {
       />
 
       <header className="relative z-10 flex items-center justify-between px-6 py-6 md:px-10">
-        <button className="flex items-center gap-2.5" onClick={() => navigate("/")}>
+        <button
+          className="flex items-center gap-2.5"
+          onClick={() => navigate("/")}
+        >
           <BrandMark className="size-8" />
           <Wordmark />
         </button>
@@ -240,9 +250,10 @@ export default function Onboarding() {
                   description.length < MIN_DESCRIPTION && (
                     <p className="mt-2 flex items-center gap-1.5 px-2 text-xs text-muted-foreground">
                       <AlertCircle className="size-3.5" />
-                      Add a sentence or two ({MIN_DESCRIPTION - description.length} more
-                      character{MIN_DESCRIPTION - description.length === 1 ? "" : "s"}) so OCIVO can
-                      build the right workspace.
+                      Add a sentence or two (
+                      {MIN_DESCRIPTION - description.length} more character
+                      {MIN_DESCRIPTION - description.length === 1 ? "" : "s"})
+                      so OCIVO can build the right workspace.
                     </p>
                   )}
               </div>
@@ -303,7 +314,8 @@ export default function Onboarding() {
                       {TYPE_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>
                           {opt.label}
-                          {opt.value === detected.type && detected.type !== "general"
+                          {opt.value === detected.type &&
+                          detected.type !== "general"
                             ? " · suggested"
                             : ""}
                         </SelectItem>
@@ -365,14 +377,21 @@ export default function Onboarding() {
               </div>
 
               <div className="mt-6 flex items-center justify-between">
-                <Button variant="ghost" className="gap-2" onClick={() => setStep(1)}>
+                <Button
+                  variant="ghost"
+                  className="gap-2"
+                  onClick={() => setStep(1)}
+                >
                   <ArrowLeft className="size-4" />
                   Back
                 </Button>
                 <Button
                   className="gap-2"
                   onClick={() => setStep(3)}
-                  disabled={name.trim().length < 2 && description.length < MIN_DESCRIPTION}
+                  disabled={
+                    name.trim().length < 2 &&
+                    description.length < MIN_DESCRIPTION
+                  }
                 >
                   <Wand2 className="size-4" />
                   Build my workspace
@@ -383,7 +402,11 @@ export default function Onboarding() {
 
           {/* ---------------- Step 3: generation ---------------- */}
           {step === 3 && (
-            <motion.section key="s3" {...fadeSlide} className="mt-16 flex flex-col items-center text-center">
+            <motion.section
+              key="s3"
+              {...fadeSlide}
+              className="mt-16 flex flex-col items-center text-center"
+            >
               <div className="relative flex size-20 items-center justify-center">
                 <span className="absolute inset-0 animate-ping rounded-full bg-primary/10" />
                 <span className="relative flex size-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
@@ -404,9 +427,12 @@ export default function Onboarding() {
                       key={label}
                       className={cn(
                         "flex items-center gap-3 rounded-xl border px-4 py-3 text-sm transition-all duration-300",
-                        done && "border-primary/25 bg-primary/5 text-foreground",
+                        done &&
+                          "border-primary/25 bg-primary/5 text-foreground",
                         active && "border-border/80 bg-card shadow-sm",
-                        !done && !active && "border-transparent text-muted-foreground/50",
+                        !done &&
+                          !active &&
+                          "border-transparent text-muted-foreground/50",
                       )}
                     >
                       <span

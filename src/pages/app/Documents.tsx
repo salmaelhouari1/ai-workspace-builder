@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
-import { FileText, Plus, Sparkles } from "lucide-react";
+import type { Id } from "@/convex/_generated/dataModel";
+import { FileText, FolderKanban, Plus, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useNavigate } from "react-router";
@@ -21,11 +22,13 @@ import { toast } from "sonner";
 export default function Documents() {
   const navigate = useNavigate();
   const docs = useQuery(api.documents.list);
+  const projects = useQuery(api.projects.list);
   const createDoc = useMutation(api.documents.create);
 
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("Notes");
+  const [projectId, setProjectId] = useState("none");
 
   const grouped = useMemo(() => {
     if (!docs) return null;
@@ -45,9 +48,12 @@ export default function Documents() {
         title: title.trim(),
         category: category.trim() || "Notes",
         content: `# ${title.trim()}\n\n`,
+        projectId:
+          projectId !== "none" ? (projectId as Id<"projects">) : undefined,
       });
       setOpen(false);
       setTitle("");
+      setProjectId("none");
       navigate(`/app/documents/${id}`);
     } catch (err) {
       console.error(err);
@@ -120,10 +126,21 @@ export default function Documents() {
                         .trim()
                         .slice(0, 180) || "Empty page"}
                     </p>
-                    <div className="mt-3 flex items-center justify-between">
-                      <Badge variant="secondary" className="text-[10px]">
-                        {doc.category}
-                      </Badge>
+                    <div className="mt-3 flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <Badge
+                          variant="secondary"
+                          className="shrink-0 text-[10px]"
+                        >
+                          {doc.category}
+                        </Badge>
+                        {doc.projectName && (
+                          <span className="flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground">
+                            <FolderKanban className="size-3 shrink-0" />
+                            <span className="truncate">{doc.projectName}</span>
+                          </span>
+                        )}
+                      </span>
                       <span className="text-[11px] text-muted-foreground">
                         {new Date(doc.updatedAt).toLocaleDateString(undefined, {
                           month: "short",
@@ -169,6 +186,24 @@ export default function Documents() {
                 placeholder="Notes"
               />
             </div>
+            {(projects?.length ?? 0) > 0 && (
+              <div className="grid gap-2">
+                <Label htmlFor="doc-project">Project (optional)</Label>
+                <select
+                  id="doc-project"
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                  className="h-9 rounded-lg border border-input bg-background px-2.5 text-sm text-muted-foreground outline-none focus:border-ring"
+                >
+                  <option value="none">No project</option>
+                  {projects?.map((p) => (
+                    <option key={p._id} value={p._id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>

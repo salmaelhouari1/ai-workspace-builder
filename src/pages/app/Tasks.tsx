@@ -24,6 +24,7 @@ import {
   ListChecks,
   MoreHorizontal,
   Plus,
+  Search,
   Sparkles,
   Trash2,
   X,
@@ -160,9 +161,8 @@ export default function Tasks() {
     return map;
   }, [filtered]);
   const roots = filtered.filter((t) => !t.parentId);
-  const openTask = tasks?.find((t) => t._id === openId);
 
-  const now = Date.now();
+  const [now] = useState(() => Date.now());
   const today = utcDayStart(now);
   const dateOptions = dueDateOptions(now);
 
@@ -318,9 +318,7 @@ export default function Tasks() {
 
       {/* Filters */}
       <div className="mt-5 flex flex-wrap items-center gap-3">
-        <div
-          className="flex h-9 min-w-52 flex-1 items-center gap-2 rounded-lg border border-input bg-background px-2.5 focus-within:border-ring"
-        >
+        <div className="flex h-9 min-w-52 flex-1 items-center gap-2 rounded-lg border border-input bg-background px-2.5 focus-within:border-ring">
           <Search className="size-3.5 shrink-0 text-muted-foreground" />
           <input
             value={search}
@@ -391,6 +389,7 @@ export default function Tasks() {
               const done = task.status === "done";
               const overdue =
                 !done && task.dueDate !== undefined && task.dueDate < today;
+              const subs = subtasksOf.get(task._id) ?? [];
               return (
                 <li key={task._id} className="group">
                   <div className="flex items-center gap-3 px-4 py-3 md:px-5">
@@ -480,10 +479,10 @@ export default function Tasks() {
                             {task.comments!.length === 1 ? "" : "s"}
                           </button>
                         )}
-                        {(subtasksOf.get(task._id)?.length ?? 0) > 0 && (
+                        {subs.length > 0 && (
                           <span>
-                            · {subtasksOf.get(task._id)!.filter((s) => s.status === "done").length}/
-                            {subtasksOf.get(task._id)!.length} subtasks
+                            · {subs.filter((s) => s.status === "done").length}/
+                            {subs.length} subtasks
                           </span>
                         )}
                       </div>
@@ -547,9 +546,7 @@ export default function Tasks() {
                           <Check className="mr-2 size-4" /> Done
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => togglePanel(task)}
-                        >
+                        <DropdownMenuItem onClick={() => togglePanel(task)}>
                           <CalendarClock className="mr-2 size-4" /> Edit task
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
@@ -568,9 +565,116 @@ export default function Tasks() {
                     </DropdownMenu>
                   </div>
 
+                  {/* Subtasks render indented under their parent */}
+                  {subs.length > 0 && (
+                    <ul className="border-t border-border/40 bg-muted/15">
+                      {subs.map((sub) => {
+                        const subDone = sub.status === "done";
+                        return (
+                          <li
+                            key={sub._id}
+                            className="flex items-center gap-3 py-2 pr-4 pl-10 md:pr-5 md:pl-14"
+                          >
+                            <button
+                              aria-label={
+                                subDone ? "Reopen subtask" : "Complete subtask"
+                              }
+                              onClick={() =>
+                                void toggleTask({
+                                  taskId: sub._id,
+                                  done: !subDone,
+                                }).catch(() =>
+                                  toast.error("Couldn't update the subtask"),
+                                )
+                              }
+                              className={cn(
+                                "relative flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors before:absolute before:-inset-2 before:rounded-full before:content-['']",
+                                subDone
+                                  ? "border-primary bg-primary text-primary-foreground"
+                                  : "border-border/80 text-transparent hover:border-primary hover:text-primary/40",
+                              )}
+                            >
+                              <Check className="size-2.5" />
+                            </button>
+                            <p
+                              className={cn(
+                                "min-w-0 flex-1 truncate text-[13px]",
+                                subDone
+                                  ? "text-muted-foreground line-through"
+                                  : "text-foreground/90",
+                              )}
+                            >
+                              {sub.title}
+                            </p>
+                            {sub.dueDate !== undefined && (
+                              <span
+                                className={cn(
+                                  "shrink-0 text-xs",
+                                  !subDone && sub.dueDate < today
+                                    ? "font-medium text-destructive"
+                                    : "text-muted-foreground",
+                                )}
+                              >
+                                {relativeDayLabel(sub.dueDate, now)}
+                              </span>
+                            )}
+                            <Flag
+                              className={cn(
+                                "size-3 shrink-0",
+                                PRIORITY_STYLE[sub.priority],
+                              )}
+                              fill={
+                                sub.priority !== "low" ? "currentColor" : "none"
+                              }
+                            />
+                            <button
+                              aria-label="Delete subtask"
+                              className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+                              onClick={() =>
+                                void deleteTask({ taskId: sub._id }).catch(() =>
+                                  toast.error("Couldn't delete the subtask"),
+                                )
+                              }
+                            >
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+
                   {/* Quick edit: due date · person · note */}
                   {openId === task._id && (
                     <div className="space-y-3.5 border-t border-border/50 bg-muted/25 px-4 py-3.5 md:px-5">
+                      {/* Title */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          Task
+                        </p>
+                        <div className="mt-1.5 flex items-end gap-2">
+                          <Input
+                            value={titleDraft}
+                            onChange={(e) => setTitleDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void submitTitle(task._id);
+                            }}
+                            className="h-8 flex-1 bg-background text-sm"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={
+                              !titleDraft.trim() ||
+                              titleDraft.trim() === task.title
+                            }
+                            onClick={() => void submitTitle(task._id)}
+                          >
+                            Save title
+                          </Button>
+                        </div>
+                      </div>
+
                       {/* Due date */}
                       <div>
                         <p className="text-xs font-semibold text-muted-foreground">
@@ -620,6 +724,73 @@ export default function Tasks() {
                             No date
                           </button>
                         </div>
+                      </div>
+
+                      {/* Priority */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          Priority
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {(["high", "medium", "low"] as Priority[]).map(
+                            (p) => (
+                              <button
+                                key={p}
+                                onClick={() =>
+                                  void updateTask({
+                                    taskId: task._id,
+                                    priority: p,
+                                  }).catch(() =>
+                                    toast.error("Couldn't update the priority"),
+                                  )
+                                }
+                                className={cn(
+                                  "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium capitalize transition-colors",
+                                  task.priority === p
+                                    ? "border-primary bg-primary/10 text-primary"
+                                    : "border-border/80 text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                                )}
+                              >
+                                <Flag
+                                  className="size-3"
+                                  fill={p !== "low" ? "currentColor" : "none"}
+                                />
+                                {p}
+                              </button>
+                            ),
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Project */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          Project
+                        </p>
+                        <select
+                          value={task.projectId ?? "none"}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            void updateTask(
+                              value === "none"
+                                ? { taskId: task._id, clearProject: true }
+                                : {
+                                    taskId: task._id,
+                                    projectId: value as Id<"projects">,
+                                  },
+                            ).catch(() =>
+                              toast.error("Couldn't move the task"),
+                            );
+                          }}
+                          className="mt-1.5 h-8 max-w-full rounded-lg border border-input bg-background px-2 text-sm text-muted-foreground outline-none focus:border-ring"
+                        >
+                          <option value="none">No project</option>
+                          {projects?.map((p) => (
+                            <option key={p._id} value={p._id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* Assignee */}
@@ -693,6 +864,92 @@ export default function Tasks() {
                               )}
                             </>
                           )}
+                        </div>
+                      </div>
+
+                      {/* Subtasks */}
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground">
+                          Subtasks
+                        </p>
+                        {subs.length > 0 && (
+                          <ul className="mt-1.5 space-y-1">
+                            {subs.map((sub) => (
+                              <li
+                                key={sub._id}
+                                className="flex items-center gap-2 rounded-lg border border-border/60 bg-card px-2.5 py-1.5"
+                              >
+                                <button
+                                  aria-label={
+                                    sub.status === "done"
+                                      ? "Reopen subtask"
+                                      : "Complete subtask"
+                                  }
+                                  onClick={() =>
+                                    void toggleTask({
+                                      taskId: sub._id,
+                                      done: sub.status !== "done",
+                                    }).catch(() =>
+                                      toast.error(
+                                        "Couldn't update the subtask",
+                                      ),
+                                    )
+                                  }
+                                  className={cn(
+                                    "flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+                                    sub.status === "done"
+                                      ? "border-primary bg-primary text-primary-foreground"
+                                      : "border-border/80 text-transparent hover:border-primary",
+                                  )}
+                                >
+                                  <Check className="size-2.5" />
+                                </button>
+                                <span
+                                  className={cn(
+                                    "min-w-0 flex-1 truncate text-sm",
+                                    sub.status === "done" &&
+                                      "text-muted-foreground line-through",
+                                  )}
+                                >
+                                  {sub.title}
+                                </span>
+                                <button
+                                  aria-label="Delete subtask"
+                                  className="shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+                                  onClick={() =>
+                                    void deleteTask({
+                                      taskId: sub._id,
+                                    }).catch(() =>
+                                      toast.error(
+                                        "Couldn't delete the subtask",
+                                      ),
+                                    )
+                                  }
+                                >
+                                  <X className="size-3.5" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <div className="mt-1.5 flex items-end gap-2">
+                          <Input
+                            value={subtaskDraft}
+                            onChange={(e) => setSubtaskDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void addSubtask(task._id);
+                            }}
+                            placeholder="Add a subtask…"
+                            className="h-8 flex-1 bg-background text-sm"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!subtaskDraft.trim()}
+                            onClick={() => void addSubtask(task._id)}
+                          >
+                            <Plus className="size-3.5" />
+                          </Button>
                         </div>
                       </div>
 

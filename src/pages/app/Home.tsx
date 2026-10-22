@@ -1,13 +1,21 @@
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
-import { relativeDayLabel, utcDayStart, DAY_MS } from "@/lib/nlp";
+import { parseTask, relativeDayLabel, utcDayStart, DAY_MS } from "@/lib/nlp";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import {
   ArrowUpRight,
   Check,
   ChevronRight,
+  Flag,
   FolderKanban,
   Lightbulb,
   Plus,
@@ -46,9 +54,10 @@ function SectionCard({
   return (
     <section
       className={cn(
-        "flex flex-col rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]",          tone === "ai"
-            ? "border-ai/25 bg-[color-mix(in_oklab,var(--ai)_4%,var(--card))]"
-            : "border-border/70",
+        "flex flex-col rounded-2xl border bg-card p-5 shadow-[0_1px_2px_rgba(0,0,0,0.03)]",
+        tone === "ai"
+          ? "border-ai/25 bg-[color-mix(in_oklab,var(--ai)_4%,var(--card))]"
+          : "border-border/70",
         className,
       )}
     >
@@ -63,6 +72,12 @@ function SectionCard({
     </section>
   );
 }
+
+const PRIORITY_STYLE: Record<string, string> = {
+  high: "text-destructive",
+  medium: "text-ai-deep",
+  low: "text-muted-foreground/70",
+};
 
 function DueChip({ due, now }: { due?: number; now: number }) {
   if (due === undefined) return null;
@@ -90,8 +105,12 @@ export default function Home() {
   const navigate = useNavigate();
   const data = useQuery(api.home.dashboard);
   const toggleTask = useMutation(api.tasks.toggle);
+  const createTask = useMutation(api.tasks.create);
+  const updateTask = useMutation(api.tasks.update);
   const organize = useMutation(api.projects.claimRelatedTasks);
   const [organizing, setOrganizing] = useState(false);
+  const [capture, setCapture] = useState("");
+  const [now] = useState(() => Date.now());
 
   if (data === undefined) {
     return (
@@ -109,7 +128,6 @@ export default function Home() {
     );
   }
 
-  const now = Date.now();
   const firstName = data.userName;
   const hasActions = data.nextActions.length > 0;
 
@@ -120,12 +138,49 @@ export default function Home() {
         description: title,
         action: {
           label: "Undo",
-          onClick: () => void toggleTask({ taskId: taskId as never, done: false }),
+          onClick: () =>
+            void toggleTask({ taskId: taskId as never, done: false }),
         },
       });
     } catch (err) {
       console.error(err);
       toast.error("Couldn't update the task");
+    }
+  };
+
+  const quickCapture = async () => {
+    const text = capture.trim();
+    if (!text) return;
+    const parsed = parseTask(text);
+    try {
+      await createTask({
+        title: parsed.title,
+        dueDate: parsed.dueDate,
+        dueTime: parsed.dueTime,
+        priority: parsed.priority,
+        source: "manual",
+      });
+      setCapture("");
+      toast.success("Task added", {
+        description: parsed.dueDate
+          ? `${parsed.title} · due ${relativeDayLabel(parsed.dueDate).toLowerCase()}`
+          : parsed.title,
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't add the task");
+    }
+  };
+
+  const setPriority = async (
+    taskId: string,
+    priority: "low" | "medium" | "high",
+  ) => {
+    try {
+      await updateTask({ taskId: taskId as never, priority });
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't update the priority");
     }
   };
 
@@ -189,6 +244,32 @@ export default function Home() {
           </Button>
         </header>
 
+        {/* Quick capture — natural language in, task out */}
+        <div className="flex items-center gap-2.5 border-b border-border/50 px-5 py-3 md:px-6">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Plus className="size-3.5" />
+          </span>
+          <input
+            value={capture}
+            onChange={(e) => setCapture(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void quickCapture();
+            }}
+            placeholder="Capture a task — “email Ana tomorrow at 10”"
+            aria-label="Quick capture a task"
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 shrink-0 gap-1 text-xs text-muted-foreground"
+            disabled={!capture.trim()}
+            onClick={() => void quickCapture()}
+          >
+            Add
+          </Button>
+        </div>
+
         <div className="divide-y divide-border/50 px-5 md:px-6">
           {hasActions ? (
             data.nextActions.map((item, index) => (
@@ -209,7 +290,13 @@ export default function Home() {
 
                 <button
                   type="button"
-                  onClick={() => navigate(item.projectId ? `/app/projects/${item.projectId}` : "/app/tasks")}
+                  onClick={() =>
+                    navigate(
+                      item.projectId
+                        ? `/app/projects/${item.projectId}`
+                        : "/app/tasks",
+                    )
+                  }
                   className="min-w-0 flex-1 break-words text-left"
                 >
                   <div className="flex flex-wrap items-center gap-2">
@@ -223,8 +310,44 @@ export default function Home() {
                       </span>
                     )}
                   </div>
-                  <p className="mt-0.5 text-sm text-muted-foreground">{item.reason}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {item.reason}
+                  </p>
                 </button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`Priority: ${item.priority}`}
+                      className="relative flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity before:absolute before:-inset-2 before:rounded-full before:content-[''] hover:bg-accent hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 max-md:opacity-100"
+                    >
+                      <Flag
+                        className={cn(
+                          "size-3.5",
+                          PRIORITY_STYLE[item.priority],
+                        )}
+                        fill={item.priority !== "low" ? "currentColor" : "none"}
+                      />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-36">
+                    <DropdownMenuLabel>Priority</DropdownMenuLabel>
+                    {(["high", "medium", "low"] as const).map((p) => (
+                      <DropdownMenuItem
+                        key={p}
+                        disabled={item.priority === p}
+                        onClick={() => void setPriority(item.taskId, p)}
+                      >
+                        <Flag
+                          className={cn("mr-2 size-3.5", PRIORITY_STYLE[p])}
+                          fill={p !== "low" ? "currentColor" : "none"}
+                        />
+                        <span className="capitalize">{p}</span>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
                 <button
                   type="button"
@@ -307,7 +430,9 @@ export default function Home() {
                         {project.deadline !== undefined && (
                           <>
                             <span aria-hidden>·</span>
-                            <span>{relativeDayLabel(project.deadline, now)}</span>
+                            <span>
+                              {relativeDayLabel(project.deadline, now)}
+                            </span>
                           </>
                         )}
                       </div>
@@ -351,7 +476,9 @@ export default function Home() {
                 {data.goals.map((goal) => (
                   <li key={goal.id}>
                     <div className="flex items-baseline justify-between gap-3">
-                      <span className="truncate text-sm font-medium">{goal.title}</span>
+                      <span className="truncate text-sm font-medium">
+                        {goal.title}
+                      </span>
                       <span className="shrink-0 text-xs font-semibold tabular-nums text-muted-foreground">
                         {goal.progress !== null ? `${goal.progress}%` : "—"}
                       </span>
@@ -406,7 +533,9 @@ export default function Home() {
                               : "bg-muted-foreground/50",
                         )}
                       />
-                      <span className="min-w-0 flex-1 truncate text-sm">{item.label}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {item.label}
+                      </span>
                       <span className="shrink-0 text-xs font-medium text-muted-foreground">
                         {item.whenLabel}
                       </span>
@@ -438,13 +567,17 @@ export default function Home() {
                   key={insight.id}
                   className={cn(
                     "flex items-start gap-3 rounded-xl border bg-background/60 px-3.5 py-3",
-                    insight.tone === "warn" ? "border-destructive/20" : "border-ai/20",
+                    insight.tone === "warn"
+                      ? "border-destructive/20"
+                      : "border-ai/20",
                   )}
                 >
                   <Lightbulb
                     className={cn(
                       "mt-0.5 size-4 shrink-0",
-                      insight.tone === "warn" ? "text-destructive" : "text-ai-deep",
+                      insight.tone === "warn"
+                        ? "text-destructive"
+                        : "text-ai-deep",
                     )}
                   />
                   <div className="min-w-0 flex-1">
@@ -512,7 +645,12 @@ function EmptyState({
         {icon}
       </span>
       <p className="text-sm text-muted-foreground">{text}</p>
-      <Button size="sm" variant="outline" className="gap-1.5" onClick={onAction}>
+      <Button
+        size="sm"
+        variant="outline"
+        className="gap-1.5"
+        onClick={onAction}
+      >
         <Sparkles className="size-3.5" />
         {actionLabel}
       </Button>

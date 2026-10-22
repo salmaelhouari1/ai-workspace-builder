@@ -52,7 +52,12 @@ export const add = mutation({
 });
 
 const entryValidator = v.object({
-  kind: v.union(v.literal("task"), v.literal("note"), v.literal("link"), v.literal("idea")),
+  kind: v.union(
+    v.literal("task"),
+    v.literal("note"),
+    v.literal("link"),
+    v.literal("idea"),
+  ),
   title: v.string(),
   detail: v.optional(v.string()),
   dueDate: v.optional(v.number()),

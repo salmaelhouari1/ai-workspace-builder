@@ -3,7 +3,11 @@ import { mutation, query } from "./_generated/server";
 import { assertMember, requireWorkspace } from "./lib/auth";
 import { logActivity } from "./lib/activity";
 
-const priority = v.union(v.literal("low"), v.literal("medium"), v.literal("high"));
+const priority = v.union(
+  v.literal("low"),
+  v.literal("medium"),
+  v.literal("high"),
+);
 const status = v.union(
   v.literal("planned"),
   v.literal("active"),
@@ -17,7 +21,9 @@ const newTaskValidator = v.object({
   dueDate: v.optional(v.number()),
   dueTime: v.optional(v.string()),
   priority: v.optional(priority),
-  status: v.optional(v.union(v.literal("todo"), v.literal("in_progress"), v.literal("done"))),
+  status: v.optional(
+    v.union(v.literal("todo"), v.literal("in_progress"), v.literal("done")),
+  ),
   reason: v.optional(v.string()),
 });
 
@@ -44,7 +50,8 @@ export const list = query({
       };
     });
     return result.sort((a, b) => {
-      const rank = (s: string) => (s === "active" ? 0 : s === "planned" ? 1 : s === "paused" ? 2 : 3);
+      const rank = (s: string) =>
+        s === "active" ? 0 : s === "planned" ? 1 : s === "paused" ? 2 : 3;
       return rank(a.status) - rank(b.status) || b.createdAt - a.createdAt;
     });
   },
@@ -61,11 +68,30 @@ export const get = query({
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
     const done = tasks.filter((t) => t.status === "done").length;
+    const documents = (
+      await ctx.db
+        .query("documents")
+        .withIndex("by_workspace", (q) =>
+          q.eq("workspaceId", project.workspaceId),
+        )
+        .collect()
+    )
+      .filter((d) => d.projectId === args.projectId)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((d) => ({
+        _id: d._id,
+        title: d.title,
+        category: d.category,
+        updatedAt: d.updatedAt,
+      }));
     return {
       ...project,
+      documents,
       tasks: tasks.sort((a, b) => {
-        if (a.status === "done" !== (b.status === "done")) return a.status === "done" ? 1 : -1;
-        if (a.dueDate !== undefined && b.dueDate !== undefined) return a.dueDate - b.dueDate;
+        if ((a.status === "done") !== (b.status === "done"))
+          return a.status === "done" ? 1 : -1;
+        if (a.dueDate !== undefined && b.dueDate !== undefined)
+          return a.dueDate - b.dueDate;
         if (a.dueDate !== undefined) return -1;
         if (b.dueDate !== undefined) return 1;
         return b.createdAt - a.createdAt;
@@ -181,18 +207,28 @@ export const claimRelatedTasks = mutation({
     if (!project) throw new Error("Project not found");
     await assertMember(ctx, project.workspaceId);
 
-    const orphans = (await ctx.db
-      .query("tasks")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", project.workspaceId))
-      .collect()).filter((t) => t.status !== "done");
+    const orphans = (
+      await ctx.db
+        .query("tasks")
+        .withIndex("by_workspace", (q) =>
+          q.eq("workspaceId", project.workspaceId),
+        )
+        .collect()
+    ).filter((t) => t.status !== "done");
 
-    const tokens = project.name.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 3);
+    const tokens = project.name
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 3);
     let claimed = 0;
     for (const task of orphans) {
       if (task.projectId) continue;
       const text = `${task.title} ${task.description ?? ""}`.toLowerCase();
       if (tokens.some((t) => text.includes(t))) {
-        await ctx.db.patch(task._id, { projectId: project._id, updatedAt: Date.now() });
+        await ctx.db.patch(task._id, {
+          projectId: project._id,
+          updatedAt: Date.now(),
+        });
         claimed += 1;
       }
     }

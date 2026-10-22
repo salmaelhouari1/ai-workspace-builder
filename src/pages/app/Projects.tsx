@@ -47,23 +47,31 @@ export default function Projects() {
   const [deadline, setDeadline] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // ?new=<name> from the command bar
+  // ?new=<name> from the command bar: consume it during render (React's
+  // "adjust state during render" pattern), then strip it from the URL.
+  const prefill = searchParams.get("new");
+  const [handledPrefill, setHandledPrefill] = useState<string | null>(null);
+  if (prefill !== null && prefill !== handledPrefill) {
+    setHandledPrefill(prefill);
+    setName(prefill);
+    setOpen(true);
+  }
+
   useEffect(() => {
-    const prefill = searchParams.get("new");
-    if (prefill) {
-      setName(prefill);
-      setOpen(true);
+    if (handledPrefill !== null && searchParams.get("new") !== null) {
       const params = new URLSearchParams(searchParams);
       params.delete("new");
       setSearchParams(params, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [handledPrefill, searchParams, setSearchParams]);
 
   const submit = async () => {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      const deadlineTs = deadline ? localDayStart(new Date(`${deadline}T00:00:00`)) : undefined;
+      const deadlineTs = deadline
+        ? localDayStart(new Date(`${deadline}T00:00:00`))
+        : undefined;
       const id = await createProject({
         name: name.trim(),
         description: description.trim() || undefined,
@@ -83,7 +91,7 @@ export default function Projects() {
     }
   };
 
-  const now = Date.now();
+  const [now] = useState(() => Date.now());
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 pb-12 pt-8 md:px-8">
@@ -134,7 +142,12 @@ export default function Projects() {
                 <h2 className="text-base font-semibold leading-snug group-hover:text-primary">
                   {project.name}
                 </h2>
-                <Badge className={cn("shrink-0 border-0 font-medium", STATUS_STYLE[project.status])}>
+                <Badge
+                  className={cn(
+                    "shrink-0 border-0 font-medium",
+                    STATUS_STYLE[project.status],
+                  )}
+                >
                   {STATUS_LABEL[project.status]}
                 </Badge>
               </div>
@@ -153,10 +166,17 @@ export default function Projects() {
 
               <div className="mt-2.5 flex items-center justify-between text-xs text-muted-foreground">
                 <span>
-                  {project.doneTasks}/{project.totalTasks} tasks · {project.progress}%
+                  {project.doneTasks}/{project.totalTasks} tasks ·{" "}
+                  {project.progress}%
                 </span>
                 {project.deadline !== undefined && (
-                  <span className={cn(relativeDayLabel(project.deadline, now).includes("late") && "text-destructive")}>
+                  <span
+                    className={cn(
+                      relativeDayLabel(project.deadline, now).includes(
+                        "late",
+                      ) && "text-destructive",
+                    )}
+                  >
                     {relativeDayLabel(project.deadline, now)}
                   </span>
                 )}

@@ -143,7 +143,9 @@ const schema = defineSchema(
       source: v.optional(v.string()), // "manual" | "ai" | "inbox" | "generated"
       createdAt: v.number(),
       updatedAt: v.number(),
-      completedAt: v.optional(v.number()),    }).index("by_workspace", ["workspaceId"])
+      completedAt: v.optional(v.number()),
+    })
+      .index("by_workspace", ["workspaceId"])
       .index("by_workspace_status", ["workspaceId", "status"])
       .index("by_project", ["projectId"])
       .index("by_parent", ["parentId"]),

@@ -36,7 +36,12 @@ async function loadContext(ctx: ActionCtx) {
 // Snapshot + contextual retrieval
 // ---------------------------------------------------------------------------
 
-function rank<T>(items: T[], question: string, text: (t: T) => string, cap: number): T[] {
+function rank<T>(
+  items: T[],
+  question: string,
+  text: (t: T) => string,
+  cap: number,
+): T[] {
   return items
     .map((item) => ({ item, s: scoreText(question, text(item)) }))
     .sort((a, b) => b.s - a.s)
@@ -44,7 +49,11 @@ function rank<T>(items: T[], question: string, text: (t: T) => string, cap: numb
     .map((x) => x.item);
 }
 
-function buildSnapshot(context: Context, question: string, focusDocId?: string): string {
+function buildSnapshot(
+  context: Context,
+  question: string,
+  focusDocId?: string,
+): string {
   const lines: string[] = [];
   const w = context.workspace;
   lines.push(
@@ -73,7 +82,8 @@ function buildSnapshot(context: Context, question: string, focusDocId?: string):
   const relevantTasks = rank(
     openTasks,
     question,
-    (t) => `${t.title} ${t.project ?? ""} ${t.reason ?? ""} ${t.tags.join(" ")}`,
+    (t) =>
+      `${t.title} ${t.project ?? ""} ${t.reason ?? ""} ${t.tags.join(" ")}`,
     40,
   );
   // Always keep overdue/today's work in the prompt — it drives most questions.
@@ -96,13 +106,18 @@ function buildSnapshot(context: Context, question: string, focusDocId?: string):
   if (docs.length) {
     lines.push("DOCUMENTS:");
     for (const d of docs.slice(0, 6)) {
-      const body = focusDocId === d.id ? d.full.slice(0, 3500) : d.excerpt.slice(0, 320);
-      lines.push(`- [doc:${d.id}] "${d.title}" (${d.category}) | route /app/documents/${d.id}\n  ${body.replace(/\n+/g, " ⏎ ")}`);
+      const body =
+        focusDocId === d.id ? d.full.slice(0, 3500) : d.excerpt.slice(0, 320);
+      lines.push(
+        `- [doc:${d.id}] "${d.title}" (${d.category}) | route /app/documents/${d.id}\n  ${body.replace(/\n+/g, " ⏎ ")}`,
+      );
     }
   }
 
   if (context.pendingInbox) {
-    lines.push(`INBOX: ${context.pendingInbox} unprocessed item(s) waiting for review.`);
+    lines.push(
+      `INBOX: ${context.pendingInbox} unprocessed item(s) waiting for review.`,
+    );
   }
 
   return lines.join("\n");
@@ -121,8 +136,19 @@ export interface TaskSpec {
 }
 
 export type Proposal =
-  | { kind: "createTasks"; tasks: TaskSpec[]; projectId?: Id<"projects">; projectLabel?: string }
-  | { kind: "createProject"; name: string; description?: string; deadline?: number; tasks: TaskSpec[] }
+  | {
+      kind: "createTasks";
+      tasks: TaskSpec[];
+      projectId?: Id<"projects">;
+      projectLabel?: string;
+    }
+  | {
+      kind: "createProject";
+      name: string;
+      description?: string;
+      deadline?: number;
+      tasks: TaskSpec[];
+    }
   | {
       kind: "updateTask";
       taskId: Id<"tasks">;
@@ -141,8 +167,20 @@ export type Proposal =
       status?: "planned" | "active" | "paused" | "done";
       note?: string;
     }
-  | { kind: "createGoal"; title: string; target?: number; current?: number; unit?: string; deadline?: number }
-  | { kind: "createDocument"; title: string; content: string; category?: string };
+  | {
+      kind: "createGoal";
+      title: string;
+      target?: number;
+      current?: number;
+      unit?: string;
+      deadline?: number;
+    }
+  | {
+      kind: "createDocument";
+      title: string;
+      content: string;
+      category?: string;
+    };
 
 function dayFromIso(iso: unknown): number | undefined {
   if (typeof iso !== "string") return undefined;
@@ -165,9 +203,15 @@ function taskSpecs(raw: unknown): TaskSpec[] {
     const due = dayFromIso(t.due);
     out.push({
       title: t.title.trim().slice(0, 200),
-      description: typeof t.description === "string" ? t.description.slice(0, 800) : undefined,
+      description:
+        typeof t.description === "string"
+          ? t.description.slice(0, 800)
+          : undefined,
       dueDate: due,
-      dueTime: typeof t.dueTime === "string" && /^\d{1,2}:\d{2}$/.test(t.dueTime) ? t.dueTime : undefined,
+      dueTime:
+        typeof t.dueTime === "string" && /^\d{1,2}:\d{2}$/.test(t.dueTime)
+          ? t.dueTime
+          : undefined,
       priority: asPriority(t.priority),
     });
   }
@@ -198,7 +242,10 @@ function convertProposal(raw: unknown, context: Context): Proposal | null {
         return {
           kind: "createProject",
           name: p.name.trim().slice(0, 160),
-          description: typeof p.description === "string" ? p.description.slice(0, 600) : undefined,
+          description:
+            typeof p.description === "string"
+              ? p.description.slice(0, 600)
+              : undefined,
           deadline: dayFromIso(p.deadline),
           tasks: taskSpecs(p.tasks),
         };
@@ -207,18 +254,30 @@ function convertProposal(raw: unknown, context: Context): Proposal | null {
         if (typeof p.taskId !== "string") return null;
         const known = context.tasks.find((t) => t.id === p.taskId);
         if (!known) return null;
-        const note = typeof p.note === "string" ? p.note.slice(0, 300) : undefined;
+        const note =
+          typeof p.note === "string" ? p.note.slice(0, 300) : undefined;
         const clearDue = p.due === null;
         const due = dayFromIso(p.due);
         const status =
-          p.status === "todo" || p.status === "in_progress" || p.status === "done"
+          p.status === "todo" ||
+          p.status === "in_progress" ||
+          p.status === "done"
             ? p.status
             : undefined;
-        if (!clearDue && due === undefined && typeof p.title !== "string" && !status) return null;
+        if (
+          !clearDue &&
+          due === undefined &&
+          typeof p.title !== "string" &&
+          !status
+        )
+          return null;
         return {
           kind: "updateTask",
           taskId: p.taskId as Id<"tasks">,
-          title: typeof p.title === "string" && p.title.trim() ? p.title.trim().slice(0, 200) : undefined,
+          title:
+            typeof p.title === "string" && p.title.trim()
+              ? p.title.trim().slice(0, 200)
+              : undefined,
           dueDate: due,
           clearDue,
           status,
@@ -232,7 +291,10 @@ function convertProposal(raw: unknown, context: Context): Proposal | null {
         const clearDeadline = p.deadline === null;
         const deadline = dayFromIso(p.deadline);
         const status =
-          p.status === "planned" || p.status === "active" || p.status === "paused" || p.status === "done"
+          p.status === "planned" ||
+          p.status === "active" ||
+          p.status === "paused" ||
+          p.status === "done"
             ? p.status
             : undefined;
         if (!clearDeadline && deadline === undefined && !status) return null;
@@ -263,7 +325,10 @@ function convertProposal(raw: unknown, context: Context): Proposal | null {
           kind: "createDocument",
           title: p.title.trim().slice(0, 160),
           content: p.content.slice(0, 20000),
-          category: typeof p.category === "string" ? p.category.slice(0, 60) : undefined,
+          category:
+            typeof p.category === "string"
+              ? p.category.slice(0, 60)
+              : undefined,
         };
       }
     }
@@ -278,7 +343,10 @@ function convertProposal(raw: unknown, context: Context): Proposal | null {
 // ---------------------------------------------------------------------------
 
 function parseJson<T>(raw: string): T | null {
-  const cleaned = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+  const cleaned = raw
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
   const start = cleaned.indexOf("{");
   const end = cleaned.lastIndexOf("}");
   if (start === -1 || end <= start) return null;
@@ -418,7 +486,9 @@ export const chat = action({
         conversationId: args.conversationId,
       });
       if (messages) {
-        history = messages.slice(-8).map((m) => ({ role: m.role, content: m.content.slice(0, 600) }));
+        history = messages
+          .slice(-8)
+          .map((m) => ({ role: m.role, content: m.content.slice(0, 600) }));
       }
     }
 
@@ -450,7 +520,8 @@ export const chat = action({
         { timeout: 20000, retries: 1 },
       );
       const text = res.data?.choices?.[0]?.message?.content;
-      if (!res.success || !text) throw new Error(res.error || "empty completion");
+      if (!res.success || !text)
+        throw new Error(res.error || "empty completion");
 
       const parsed = parseJson<{
         answer?: unknown;
@@ -477,15 +548,13 @@ export const chat = action({
       answer = "I couldn't put that together — try rephrasing?";
     }
 
-    const saved: { conversationId: Id<"aiConversations"> } = await ctx.runMutation(
-      api.conversations.saveExchange,
-      {
+    const saved: { conversationId: Id<"aiConversations"> } =
+      await ctx.runMutation(api.conversations.saveExchange, {
         conversationId: args.conversationId,
         question,
         answer,
         references,
-      },
-    );
+      });
 
     return {
       answer,
@@ -539,29 +608,44 @@ export const parseInbox = action({
           temperature: 0,
           maxTokens: 1200,
           messages: [
-            { role: "system", content: INBOX_SYSTEM.replace("$TODAY", context?.today ?? "today") },
+            {
+              role: "system",
+              content: INBOX_SYSTEM.replace(
+                "$TODAY",
+                context?.today ?? "today",
+              ),
+            },
             { role: "user", content: text },
           ],
         },
         { timeout: 20000, retries: 1 },
       );
       const body = res.data?.choices?.[0]?.message?.content;
-      if (!res.success || !body) throw new Error(res.error || "empty completion");
+      if (!res.success || !body)
+        throw new Error(res.error || "empty completion");
       const parsed = parseJson<InboxAI>(body);
       if (!parsed?.items?.length) throw new Error("no items");
 
       const items: InboxEntry[] = [];
       for (const raw of parsed.items.slice(0, 24)) {
         if (!raw?.title || typeof raw.title !== "string") continue;
-        const kind = INBOX_KINDS.includes(raw.kind as (typeof INBOX_KINDS)[number])
+        const kind = INBOX_KINDS.includes(
+          raw.kind as (typeof INBOX_KINDS)[number],
+        )
           ? (raw.kind as InboxEntry["kind"])
           : "note";
         items.push({
           kind,
           title: raw.title.trim().slice(0, 160),
-          detail: typeof raw.detail === "string" ? raw.detail.slice(0, 1000) : undefined,
+          detail:
+            typeof raw.detail === "string"
+              ? raw.detail.slice(0, 1000)
+              : undefined,
           dueDate: dayFromIso(raw.due),
-          url: typeof raw.url === "string" && /^https?:\/\//.test(raw.url) ? raw.url : undefined,
+          url:
+            typeof raw.url === "string" && /^https?:\/\//.test(raw.url)
+              ? raw.url
+              : undefined,
           include: true,
         });
       }

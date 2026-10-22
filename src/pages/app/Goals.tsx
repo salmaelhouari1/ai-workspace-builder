@@ -11,11 +11,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { localDayStart, relativeDayLabel } from "@/lib/nlp";
 import { cn } from "@/lib/utils";
-import { Check, Plus, Sparkles, Target, Trash2 } from "lucide-react";
+import {
+  Check,
+  FolderKanban,
+  Plus,
+  Sparkles,
+  Target,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 interface GoalDraft {
@@ -25,12 +34,22 @@ interface GoalDraft {
   current: string;
   unit: string;
   deadline: string;
+  projectIds: string[];
 }
 
-const EMPTY: GoalDraft = { title: "", target: "", current: "", unit: "", deadline: "" };
+const EMPTY: GoalDraft = {
+  title: "",
+  target: "",
+  current: "",
+  unit: "",
+  deadline: "",
+  projectIds: [],
+};
 
 export default function Goals() {
+  const navigate = useNavigate();
   const goals = useQuery(api.goals.list);
+  const linkable = useQuery(api.goals.linkableProjects);
   const createGoal = useMutation(api.goals.create);
   const updateGoal = useMutation(api.goals.update);
   const deleteGoal = useMutation(api.goals.remove);
@@ -54,6 +73,7 @@ export default function Goals() {
       deadline: goal.deadline
         ? new Date(goal.deadline).toISOString().slice(0, 10)
         : "",
+      projectIds: goal.projectIds ?? [],
     });
     setOpen(true);
   };
@@ -71,6 +91,7 @@ export default function Goals() {
         current: draft.current ? Number(draft.current) : undefined,
         unit: draft.unit.trim() || undefined,
         deadline,
+        projectIds: draft.projectIds as Id<"projects">[],
       };
       if (draft.id) {
         await updateGoal({ goalId: draft.id as never, ...payload });
@@ -88,7 +109,7 @@ export default function Goals() {
     }
   };
 
-  const now = Date.now();
+  const [now] = useState(() => Date.now());
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 pb-12 pt-8 md:px-8">
@@ -136,7 +157,10 @@ export default function Goals() {
               )}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <button className="min-w-0 flex-1 text-left" onClick={() => openEdit(goal)}>
+                <button
+                  className="min-w-0 flex-1 text-left"
+                  onClick={() => openEdit(goal)}
+                >
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-base font-semibold">{goal.title}</h2>
                     {goal.status === "done" && (
@@ -151,16 +175,28 @@ export default function Goals() {
                         {goal.progress}%
                       </span>
                     )}
-                    {goal.current !== undefined && goal.target !== undefined && (
-                      <span className="tabular-nums">
-                        {goal.current}
-                        {goal.unit === "%" ? "%" : goal.unit ? ` ${goal.unit}` : ""} /{" "}
-                        {goal.target}
-                        {goal.unit === "%" ? "%" : goal.unit ? ` ${goal.unit}` : ""}
-                      </span>
-                    )}
+                    {goal.current !== undefined &&
+                      goal.target !== undefined && (
+                        <span className="tabular-nums">
+                          {goal.current}
+                          {goal.unit === "%"
+                            ? "%"
+                            : goal.unit
+                              ? ` ${goal.unit}`
+                              : ""}{" "}
+                          / {goal.target}
+                          {goal.unit === "%"
+                            ? "%"
+                            : goal.unit
+                              ? ` ${goal.unit}`
+                              : ""}
+                        </span>
+                      )}
                     {goal.deadline !== undefined && (
                       <span>by {relativeDayLabel(goal.deadline, now)}</span>
+                    )}
+                    {goal.progressSource === "projects" && (
+                      <span className="text-xs">from linked projects</span>
                     )}
                   </div>
                 </button>
@@ -196,6 +232,23 @@ export default function Goals() {
                   style={{ width: `${Math.max(goal.progress ?? 0, 2)}%` }}
                 />
               </div>
+
+              {goal.linkedProjects.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {goal.linkedProjects.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => navigate(`/app/projects/${p.id}`)}
+                      title={`${p.doneTasks}/${p.totalTasks} tasks done`}
+                      className="flex items-center gap-1.5 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                    >
+                      <FolderKanban className="size-3" />
+                      <span className="max-w-[18ch] truncate">{p.name}</span>
+                      <span className="tabular-nums">{p.progress}%</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {goal.note && (
                 <p className="mt-3 flex items-start gap-2 rounded-xl border border-ai/25 bg-ai/10 px-3.5 py-2.5 text-sm text-foreground/90">
@@ -240,7 +293,9 @@ export default function Goals() {
                   type="number"
                   inputMode="decimal"
                   value={draft.current}
-                  onChange={(e) => setDraft({ ...draft, current: e.target.value })}
+                  onChange={(e) =>
+                    setDraft({ ...draft, current: e.target.value })
+                  }
                   placeholder="6400"
                 />
               </div>
@@ -251,7 +306,9 @@ export default function Goals() {
                   type="number"
                   inputMode="decimal"
                   value={draft.target}
-                  onChange={(e) => setDraft({ ...draft, target: e.target.value })}
+                  onChange={(e) =>
+                    setDraft({ ...draft, target: e.target.value })
+                  }
                   placeholder="10000"
                 />
               </div>
@@ -271,8 +328,54 @@ export default function Goals() {
                 id="goal-deadline"
                 type="date"
                 value={draft.deadline}
-                onChange={(e) => setDraft({ ...draft, deadline: e.target.value })}
+                onChange={(e) =>
+                  setDraft({ ...draft, deadline: e.target.value })
+                }
               />
+            </div>
+            <div className="grid gap-2">
+              <Label>
+                Linked projects{" "}
+                <span className="font-normal text-muted-foreground">
+                  — progress follows their tasks
+                </span>
+              </Label>
+              {linkable === undefined ? (
+                <Skeleton className="h-8" />
+              ) : linkable.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No projects yet — create one in Projects first.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {linkable.map((p) => {
+                    const active = draft.projectIds.includes(p.id);
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() =>
+                          setDraft({
+                            ...draft,
+                            projectIds: active
+                              ? draft.projectIds.filter((x) => x !== p.id)
+                              : [...draft.projectIds, p.id],
+                          })
+                        }
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                          active
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border/80 text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                        )}
+                      >
+                        {active && <Check className="size-3" />}
+                        {p.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -282,7 +385,10 @@ export default function Goals() {
                 variant="ghost"
                 className="text-primary"
                 onClick={() =>
-                  void updateGoal({ goalId: draft.id as never, status: "done" }).then(() => {
+                  void updateGoal({
+                    goalId: draft.id as never,
+                    status: "done",
+                  }).then(() => {
                     toast.success("Goal marked as achieved 🎉");
                     setOpen(false);
                   })

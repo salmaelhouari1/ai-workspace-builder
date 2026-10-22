@@ -112,26 +112,60 @@ function seedFor(input: SeedInput): WorkspaceSeed {
         projects: [
           {
             name: "Client work",
-            description: "Deliverables for current clients — keep these moving first.",
+            description:
+              "Deliverables for current clients — keep these moving first.",
             status: "active",
             priority: "high",
             tasks: [
-              { title: "Finish current client deliverable", dueIn: 1, priority: "high", status: "in_progress" },
-              { title: "Send proposal to warm lead", dueIn: 0, priority: "high", reason: FOLLOW_UP_REASON },
-              { title: "Follow up with 3 leads", dueIn: 0, priority: "high", reason: FOLLOW_UP_REASON },
-              { title: "Invoice this month's clients", dueIn: 4, priority: "medium" },
+              {
+                title: "Finish current client deliverable",
+                dueIn: 1,
+                priority: "high",
+                status: "in_progress",
+              },
+              {
+                title: "Send proposal to warm lead",
+                dueIn: 0,
+                priority: "high",
+                reason: FOLLOW_UP_REASON,
+              },
+              {
+                title: "Follow up with 3 leads",
+                dueIn: 0,
+                priority: "high",
+                reason: FOLLOW_UP_REASON,
+              },
+              {
+                title: "Invoice this month's clients",
+                dueIn: 4,
+                priority: "medium",
+              },
             ],
           },
           {
             name: "Portfolio refresh",
-            description: "Show your best work so new clients find you easy to say yes to.",
+            description:
+              "Show your best work so new clients find you easy to say yes to.",
             status: "active",
             priority: "medium",
             deadlineIn: 21,
             tasks: [
-              { title: "Finish landing page", dueIn: 1, priority: "high", status: "in_progress" },
-              { title: "Publish 2 new case studies", dueIn: 7, priority: "medium" },
-              { title: "Update services & pricing page", dueIn: 10, priority: "low" },
+              {
+                title: "Finish landing page",
+                dueIn: 1,
+                priority: "high",
+                status: "in_progress",
+              },
+              {
+                title: "Publish 2 new case studies",
+                dueIn: 7,
+                priority: "medium",
+              },
+              {
+                title: "Update services & pricing page",
+                dueIn: 10,
+                priority: "low",
+              },
             ],
           },
           {
@@ -140,15 +174,35 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "active",
             priority: "medium",
             tasks: [
-              { title: "Prepare tomorrow's content", reason: CONTENT_TASK_REASON, tags: ["content"] },
+              {
+                title: "Prepare tomorrow's content",
+                reason: CONTENT_TASK_REASON,
+                tags: ["content"],
+              },
               { title: "Message 3 warm leads", dueIn: 2, priority: "high" },
-              { title: "Ask 2 happy clients for a testimonial", dueIn: 5, priority: "low" },
+              {
+                title: "Ask 2 happy clients for a testimonial",
+                dueIn: 5,
+                priority: "low",
+              },
             ],
           },
         ],
         goals: [
-          { title: "Get 3 new clients this month", target: 3, current: 1, unit: "clients", deadlineIn: 24 },
-          { title: "Finish current projects", target: 3, current: 1, unit: "projects", deadlineIn: 30 },
+          {
+            title: "Get 3 new clients this month",
+            target: 3,
+            current: 1,
+            unit: "clients",
+            deadlineIn: 24,
+          },
+          {
+            title: "Finish current projects",
+            target: 3,
+            current: 1,
+            unit: "projects",
+            deadlineIn: 30,
+          },
         ],
         documents: [
           overviewDoc(
@@ -159,12 +213,13 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             title: "Services & pricing",
             category: "Services",
             content:
-              "# Services & pricing\n\n- [ ] Define your core offer\n- [ ] Write a one-paragraph pitch\n- [ ] Set a floor price you never go below\n\n> [!ai] Ask OCIVO: \"turn my services into a proposal template.\"",
+              '# Services & pricing\n\n- [ ] Define your core offer\n- [ ] Write a one-paragraph pitch\n- [ ] Set a floor price you never go below\n\n> [!ai] Ask OCIVO: "turn my services into a proposal template."',
           },
           {
             title: "Meeting notes",
             category: "Notes",
-            content: "# Meeting notes\n\nCapture calls here — or dump them in the Inbox and let OCIVO split them into tasks.",
+            content:
+              "# Meeting notes\n\nCapture calls here — or dump them in the Inbox and let OCIVO split them into tasks.",
           },
         ],
       };
@@ -175,18 +230,44 @@ function seedFor(input: SeedInput): WorkspaceSeed {
         projects: [
           {
             name: "Product launch",
-            description: "Everything needed to launch the new collection next month.",
+            description:
+              "Everything needed to launch the new collection next month.",
             status: "active",
             priority: "high",
             deadlineIn: 30,
             tasks: [
-              { title: "Finish the landing page", dueIn: 1, priority: "high", status: "in_progress" },
+              {
+                title: "Finish the landing page",
+                dueIn: 1,
+                priority: "high",
+                status: "in_progress",
+              },
               { title: "Shoot product photos", dueIn: 4, priority: "high" },
-              { title: "Write product descriptions", dueIn: 6, priority: "medium" },
-              { title: "Set up inventory tracking", dueIn: 8, priority: "medium" },
-              { title: "Build the launch checklist", dueIn: 3, priority: "high" },
-              { title: "Plan launch marketing campaign", dueIn: 10, priority: "medium" },
-              { title: "Prepare email announcement", dueIn: 14, priority: "low" },
+              {
+                title: "Write product descriptions",
+                dueIn: 6,
+                priority: "medium",
+              },
+              {
+                title: "Set up inventory tracking",
+                dueIn: 8,
+                priority: "medium",
+              },
+              {
+                title: "Build the launch checklist",
+                dueIn: 3,
+                priority: "high",
+              },
+              {
+                title: "Plan launch marketing campaign",
+                dueIn: 10,
+                priority: "medium",
+              },
+              {
+                title: "Prepare email announcement",
+                dueIn: 14,
+                priority: "low",
+              },
               { title: "Define launch KPIs", dueIn: 5, priority: "medium" },
             ],
           },
@@ -196,9 +277,22 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "active",
             priority: "medium",
             tasks: [
-              { title: "Prepare tomorrow's content", reason: CONTENT_TASK_REASON, tags: ["content"] },
-              { title: "Publish Instagram post", dueIn: 2, priority: "medium", tags: ["content"] },
-              { title: "Reply to customer comments", dueIn: 0, priority: "medium" },
+              {
+                title: "Prepare tomorrow's content",
+                reason: CONTENT_TASK_REASON,
+                tags: ["content"],
+              },
+              {
+                title: "Publish Instagram post",
+                dueIn: 2,
+                priority: "medium",
+                tags: ["content"],
+              },
+              {
+                title: "Reply to customer comments",
+                dueIn: 0,
+                priority: "medium",
+              },
             ],
           },
           {
@@ -207,15 +301,40 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "active",
             priority: "medium",
             tasks: [
-              { title: "Follow up with 3 leads", dueIn: 0, priority: "high", reason: FOLLOW_UP_REASON },
-              { title: "Review weekly sales numbers", dueIn: 3, priority: "medium" },
-              { title: "Restock best-selling sizes", dueIn: 7, priority: "medium" },
+              {
+                title: "Follow up with 3 leads",
+                dueIn: 0,
+                priority: "high",
+                reason: FOLLOW_UP_REASON,
+              },
+              {
+                title: "Review weekly sales numbers",
+                dueIn: 3,
+                priority: "medium",
+              },
+              {
+                title: "Restock best-selling sizes",
+                dueIn: 7,
+                priority: "medium",
+              },
             ],
           },
         ],
         goals: [
-          { title: "Reach €10,000 revenue by December", target: 10000, current: 6400, unit: "€", deadlineIn: 60 },
-          { title: "Launch the new collection", target: 100, current: 35, unit: "%", deadlineIn: 30 },
+          {
+            title: "Reach €10,000 revenue by December",
+            target: 10000,
+            current: 6400,
+            unit: "€",
+            deadlineIn: 60,
+          },
+          {
+            title: "Launch the new collection",
+            target: 100,
+            current: 35,
+            unit: "%",
+            deadlineIn: 30,
+          },
         ],
         documents: [
           overviewDoc(
@@ -248,10 +367,27 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             priority: "high",
             deadlineIn: 45,
             tasks: [
-              { title: "Finish the landing page", dueIn: 1, priority: "high", status: "in_progress" },
-              { title: "Define the onboarding flow", dueIn: 3, priority: "high" },
-              { title: "Ship the first core feature", dueIn: 10, priority: "high" },
-              { title: "Set up feedback collection", dueIn: 7, priority: "medium" },
+              {
+                title: "Finish the landing page",
+                dueIn: 1,
+                priority: "high",
+                status: "in_progress",
+              },
+              {
+                title: "Define the onboarding flow",
+                dueIn: 3,
+                priority: "high",
+              },
+              {
+                title: "Ship the first core feature",
+                dueIn: 10,
+                priority: "high",
+              },
+              {
+                title: "Set up feedback collection",
+                dueIn: 7,
+                priority: "medium",
+              },
             ],
           },
           {
@@ -260,28 +396,62 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "planned",
             priority: "medium",
             tasks: [
-              { title: "Prepare tomorrow's content", reason: CONTENT_TASK_REASON, tags: ["content"] },
-              { title: "Write launch announcement", dueIn: 12, priority: "medium", tags: ["content"] },
+              {
+                title: "Prepare tomorrow's content",
+                reason: CONTENT_TASK_REASON,
+                tags: ["content"],
+              },
+              {
+                title: "Write launch announcement",
+                dueIn: 12,
+                priority: "medium",
+                tags: ["content"],
+              },
               { title: "Line up 5 beta testers", dueIn: 5, priority: "high" },
             ],
           },
           {
             name: "Talk to users",
-            description: "Interviews, feedback, and the follow-ups they create.",
+            description:
+              "Interviews, feedback, and the follow-ups they create.",
             status: "active",
             priority: "medium",
             tasks: [
-              { title: "Follow up with 3 leads", dueIn: 0, priority: "high", reason: FOLLOW_UP_REASON },
-              { title: "Book 3 customer interviews", dueIn: 6, priority: "medium" },
+              {
+                title: "Follow up with 3 leads",
+                dueIn: 0,
+                priority: "high",
+                reason: FOLLOW_UP_REASON,
+              },
+              {
+                title: "Book 3 customer interviews",
+                dueIn: 6,
+                priority: "medium",
+              },
             ],
           },
         ],
         goals: [
-          { title: "Reach 100 signups", target: 100, current: 34, unit: "users", deadlineIn: 60 },
-          { title: "Ship the MVP", target: 100, current: 40, unit: "%", deadlineIn: 45 },
+          {
+            title: "Reach 100 signups",
+            target: 100,
+            current: 34,
+            unit: "users",
+            deadlineIn: 60,
+          },
+          {
+            title: "Ship the MVP",
+            target: 100,
+            current: 40,
+            unit: "%",
+            deadlineIn: 45,
+          },
         ],
         documents: [
-          overviewDoc(input, "A software product solving one painful problem for a focused audience."),
+          overviewDoc(
+            input,
+            "A software product solving one painful problem for a focused audience.",
+          ),
           {
             title: "Product roadmap",
             category: "Product",
@@ -291,7 +461,8 @@ function seedFor(input: SeedInput): WorkspaceSeed {
           {
             title: "User interview notes",
             category: "Notes",
-            content: "# User interview notes\n\nPaste raw notes in the Inbox — OCIVO will split them into tasks and decisions.",
+            content:
+              "# User interview notes\n\nPaste raw notes in the Inbox — OCIVO will split them into tasks and decisions.",
           },
         ],
       };
@@ -306,9 +477,25 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "active",
             priority: "high",
             tasks: [
-              { title: "Prepare tomorrow's content", dueIn: 1, priority: "high", reason: CONTENT_TASK_REASON, tags: ["content"] },
-              { title: "Batch-record this week's videos", dueIn: 3, priority: "high", tags: ["content"] },
-              { title: "Write newsletter draft", dueIn: 4, priority: "medium", tags: ["content"] },
+              {
+                title: "Prepare tomorrow's content",
+                dueIn: 1,
+                priority: "high",
+                reason: CONTENT_TASK_REASON,
+                tags: ["content"],
+              },
+              {
+                title: "Batch-record this week's videos",
+                dueIn: 3,
+                priority: "high",
+                tags: ["content"],
+              },
+              {
+                title: "Write newsletter draft",
+                dueIn: 4,
+                priority: "medium",
+                tags: ["content"],
+              },
             ],
           },
           {
@@ -317,9 +504,25 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "active",
             priority: "medium",
             tasks: [
-              { title: "Follow up with 3 leads", dueIn: 0, priority: "medium", reason: FOLLOW_UP_REASON, description: "Brand collabs and partnerships waiting for a reply." },
-              { title: "Pitch 2 collaboration ideas", dueIn: 5, priority: "medium" },
-              { title: "Repurpose top post into a short", dueIn: 2, priority: "low", tags: ["content"] },
+              {
+                title: "Follow up with 3 leads",
+                dueIn: 0,
+                priority: "medium",
+                reason: FOLLOW_UP_REASON,
+                description:
+                  "Brand collabs and partnerships waiting for a reply.",
+              },
+              {
+                title: "Pitch 2 collaboration ideas",
+                dueIn: 5,
+                priority: "medium",
+              },
+              {
+                title: "Repurpose top post into a short",
+                dueIn: 2,
+                priority: "low",
+                tags: ["content"],
+              },
             ],
           },
           {
@@ -328,22 +531,45 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "planned",
             priority: "low",
             tasks: [
-              { title: "List 3 sponsorship opportunities", dueIn: 7, priority: "medium" },
-              { title: "Sketch the first digital product", dueIn: 14, priority: "low" },
+              {
+                title: "List 3 sponsorship opportunities",
+                dueIn: 7,
+                priority: "medium",
+              },
+              {
+                title: "Sketch the first digital product",
+                dueIn: 14,
+                priority: "low",
+              },
             ],
           },
         ],
         goals: [
-          { title: "Reach10,000 followers", target: 10000, current: 6400, unit: "followers", deadlineIn: 90 },
-          { title: "Publish 3x per week", target: 12, current: 5, unit: "posts", deadlineIn: 28 },
+          {
+            title: "Reach10,000 followers",
+            target: 10000,
+            current: 6400,
+            unit: "followers",
+            deadlineIn: 90,
+          },
+          {
+            title: "Publish 3x per week",
+            target: 12,
+            current: 5,
+            unit: "posts",
+            deadlineIn: 28,
+          },
         ],
         documents: [
-          overviewDoc(input, "A creator business built on a consistent publishing rhythm and a loyal audience."),
+          overviewDoc(
+            input,
+            "A creator business built on a consistent publishing rhythm and a loyal audience.",
+          ),
           {
             title: "Content pillars",
             category: "Content",
             content:
-              "# Content pillars\n\n1. Education — teach the craft\n2. Behind the scenes — build trust\n3. Offers — drive revenue\n\n> [!ai] Ask OCIVO: \"create a content calendar for next month.\"",
+              '# Content pillars\n\n1. Education — teach the craft\n2. Behind the scenes — build trust\n3. Offers — drive revenue\n\n> [!ai] Ask OCIVO: "create a content calendar for next month."',
           },
         ],
       };
@@ -358,9 +584,22 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "active",
             priority: "high",
             tasks: [
-              { title: "Finish the landing page", dueIn: 1, priority: "high", status: "in_progress" },
-              { title: "Send monthly client reports", dueIn: 3, priority: "high" },
-              { title: "Review campaign results", dueIn: 5, priority: "medium" },
+              {
+                title: "Finish the landing page",
+                dueIn: 1,
+                priority: "high",
+                status: "in_progress",
+              },
+              {
+                title: "Send monthly client reports",
+                dueIn: 3,
+                priority: "high",
+              },
+              {
+                title: "Review campaign results",
+                dueIn: 5,
+                priority: "medium",
+              },
             ],
           },
           {
@@ -369,7 +608,12 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "active",
             priority: "high",
             tasks: [
-              { title: "Follow up with 3 leads", dueIn: 0, priority: "high", reason: FOLLOW_UP_REASON },
+              {
+                title: "Follow up with 3 leads",
+                dueIn: 0,
+                priority: "high",
+                reason: FOLLOW_UP_REASON,
+              },
               { title: "Send 2 proposals out", dueIn: 2, priority: "high" },
               { title: "Qualify new inquiries", dueIn: 1, priority: "medium" },
             ],
@@ -380,17 +624,41 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "active",
             priority: "medium",
             tasks: [
-              { title: "Prepare tomorrow's content", reason: CONTENT_TASK_REASON, tags: ["content"] },
-              { title: "Publish case study", dueIn: 8, priority: "medium", tags: ["content"] },
+              {
+                title: "Prepare tomorrow's content",
+                reason: CONTENT_TASK_REASON,
+                tags: ["content"],
+              },
+              {
+                title: "Publish case study",
+                dueIn: 8,
+                priority: "medium",
+                tags: ["content"],
+              },
             ],
           },
         ],
         goals: [
-          { title: "Sign 2 new retainers this month", target: 2, current: 0, unit: "retainers", deadlineIn: 24 },
-          { title: "Reach €20,000 monthly revenue", target: 20000, current: 14500, unit: "€", deadlineIn: 45 },
+          {
+            title: "Sign 2 new retainers this month",
+            target: 2,
+            current: 0,
+            unit: "retainers",
+            deadlineIn: 24,
+          },
+          {
+            title: "Reach €20,000 monthly revenue",
+            target: 20000,
+            current: 14500,
+            unit: "€",
+            deadlineIn: 45,
+          },
         ],
         documents: [
-          overviewDoc(input, "A small team delivering marketing outcomes for a roster of clients."),
+          overviewDoc(
+            input,
+            "A small team delivering marketing outcomes for a roster of clients.",
+          ),
           {
             title: "Client onboarding SOP",
             category: "Processes",
@@ -407,14 +675,29 @@ function seedFor(input: SeedInput): WorkspaceSeed {
         projects: [
           {
             name: "Make it real",
-            description: "The first concrete steps from idea to something people can use.",
+            description:
+              "The first concrete steps from idea to something people can use.",
             status: "active",
             priority: "high",
             deadlineIn: 30,
             tasks: [
-              { title: "Follow up with 3 leads", dueIn: 0, priority: "high", reason: FOLLOW_UP_REASON },
-              { title: "Finish the landing page", dueIn: 1, priority: "high", status: "in_progress" },
-              { title: "Talk to 5 potential customers", dueIn: 7, priority: "high" },
+              {
+                title: "Follow up with 3 leads",
+                dueIn: 0,
+                priority: "high",
+                reason: FOLLOW_UP_REASON,
+              },
+              {
+                title: "Finish the landing page",
+                dueIn: 1,
+                priority: "high",
+                status: "in_progress",
+              },
+              {
+                title: "Talk to 5 potential customers",
+                dueIn: 7,
+                priority: "high",
+              },
               { title: "Define the first offer", dueIn: 4, priority: "medium" },
             ],
           },
@@ -424,25 +707,60 @@ function seedFor(input: SeedInput): WorkspaceSeed {
             status: "active",
             priority: "medium",
             tasks: [
-              { title: "Prepare tomorrow's content", reason: CONTENT_TASK_REASON, tags: ["content"] },
-              { title: "Set up social profiles", dueIn: 3, priority: "medium", tags: ["content"] },
-              { title: "Write your origin story post", dueIn: 6, priority: "low", tags: ["content"] },
+              {
+                title: "Prepare tomorrow's content",
+                reason: CONTENT_TASK_REASON,
+                tags: ["content"],
+              },
+              {
+                title: "Set up social profiles",
+                dueIn: 3,
+                priority: "medium",
+                tags: ["content"],
+              },
+              {
+                title: "Write your origin story post",
+                dueIn: 6,
+                priority: "low",
+                tags: ["content"],
+              },
             ],
           },
           {
             name: "Organise the basics",
-            description: "The boring foundation that keeps everything else sane.",
+            description:
+              "The boring foundation that keeps everything else sane.",
             status: "active",
             priority: "low",
             tasks: [
-              { title: "Write the business overview", dueIn: 2, priority: "medium" },
-              { title: "Set a weekly review ritual", dueIn: 7, priority: "low" },
+              {
+                title: "Write the business overview",
+                dueIn: 2,
+                priority: "medium",
+              },
+              {
+                title: "Set a weekly review ritual",
+                dueIn: 7,
+                priority: "low",
+              },
             ],
           },
         ],
         goals: [
-          { title: "Reach €10,000 revenue", target: 10000, current: 6400, unit: "€", deadlineIn: 60 },
-          { title: "Get first 10 customers", target: 10, current: 3, unit: "customers", deadlineIn: 45 },
+          {
+            title: "Reach €10,000 revenue",
+            target: 10000,
+            current: 6400,
+            unit: "€",
+            deadlineIn: 60,
+          },
+          {
+            title: "Get first 10 customers",
+            target: 10,
+            current: 3,
+            unit: "customers",
+            deadlineIn: 45,
+          },
         ],
         documents: [
           overviewDoc(
@@ -483,8 +801,16 @@ export function buildSeed(input: SeedInput): WorkspaceSeed {
         status: "planned",
         priority: "medium",
         tasks: [
-          { title: "Break this goal into weekly steps", dueIn: 3, priority: "medium" },
-          { title: "Define what \"done\" looks like", dueIn: 2, priority: "medium" },
+          {
+            title: "Break this goal into weekly steps",
+            dueIn: 3,
+            priority: "medium",
+          },
+          {
+            title: 'Define what "done" looks like',
+            dueIn: 2,
+            priority: "medium",
+          },
         ],
       });
     }
