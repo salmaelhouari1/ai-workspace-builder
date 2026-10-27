@@ -24,12 +24,20 @@ export const run = query({
     if (q.length < 2) return [];
     const { workspaceId } = await requireWorkspace(ctx);
 
+    // Bounded scans: search reads at most this many rows per entity, keeping
+    // the query cheap at any workspace size.
+    const CAP = 300;
     const [tasks, projects, docs, goals, inbox] = await Promise.all([
-      ctx.db.query("tasks").withIndex("by_workspace", (x) => x.eq("workspaceId", workspaceId)).collect(),
+      ctx.db.query("tasks").withIndex("by_workspace", (x) => x.eq("workspaceId", workspaceId)).take(CAP),
       ctx.db.query("projects").withIndex("by_workspace", (x) => x.eq("workspaceId", workspaceId)).collect(),
-      ctx.db.query("documents").withIndex("by_workspace", (x) => x.eq("workspaceId", workspaceId)).collect(),
+      ctx.db.query("documents").withIndex("by_workspace", (x) => x.eq("workspaceId", workspaceId)).take(CAP),
       ctx.db.query("goals").withIndex("by_workspace", (x) => x.eq("workspaceId", workspaceId)).collect(),
-      ctx.db.query("inboxItems").withIndex("by_workspace", (x) => x.eq("workspaceId", workspaceId)).collect(),
+      ctx.db
+        .query("inboxItems")
+        .withIndex("by_workspace_status", (x) =>
+          x.eq("workspaceId", workspaceId).eq("status", "pending"),
+        )
+        .take(40),
     ]);
 
     const hits: SearchHit[] = [];

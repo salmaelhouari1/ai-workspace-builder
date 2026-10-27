@@ -20,13 +20,15 @@ export const latest = query({
       .take(1);
     const conversation = conversations[0];
     if (!conversation) return null;
-    const messages = await ctx.db
+    const messages = (await ctx.db
       .query("aiMessages")
       .withIndex("by_conversation", (q) => q.eq("conversationId", conversation._id))
-      .collect();
+      .order("desc")
+      .take(60))
+      .sort((a, b) => a.createdAt - b.createdAt);
     return {
       conversation,
-      messages: messages.sort((a, b) => a.createdAt - b.createdAt),
+      messages,
     };
   },
 });

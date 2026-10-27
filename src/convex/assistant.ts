@@ -28,8 +28,11 @@ const MODEL = "gpt-4o-mini";
 
 type Context = NonNullable<Awaited<ReturnType<typeof loadContext>>>;
 
-async function loadContext(ctx: ActionCtx) {
-  return await ctx.runQuery(api.context.workspaceContext, {});
+async function loadContext(
+  ctx: ActionCtx,
+  focusDocumentId?: Id<"documents">,
+) {
+  return await ctx.runQuery(api.context.workspaceContext, { focusDocumentId });
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +110,9 @@ function buildSnapshot(
     lines.push("DOCUMENTS:");
     for (const d of docs.slice(0, 6)) {
       const body =
-        focusDocId === d.id ? d.full.slice(0, 3500) : d.excerpt.slice(0, 320);
+        focusDocId === d.id
+          ? (d.full ?? "").slice(0, 3500)
+          : d.excerpt.slice(0, 320);
       lines.push(
         `- [doc:${d.id}] "${d.title}" (${d.category}) | route /app/documents/${d.id}\n  ${body.replace(/\n+/g, " ⏎ ")}`,
       );
@@ -460,7 +465,10 @@ export const chat = action({
     instruction: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<ChatResult> => {
-    const context = await loadContext(ctx);
+    const context = await loadContext(
+      ctx,
+      args.mode === "document" && args.documentId ? args.documentId : undefined,
+    );
     if (!context) {
       return {
         answer: "You're signed out — sign back in to talk to your workspace.",

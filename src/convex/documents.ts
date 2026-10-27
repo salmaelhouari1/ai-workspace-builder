@@ -6,18 +6,25 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     const { workspaceId } = await requireWorkspace(ctx);
-    const docs = await ctx.db
-      .query("documents")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-      .collect();
-    const projects = await ctx.db
-      .query("projects")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-      .collect();
+    // List returns page-level summaries only — full bodies are fetched per
+    // document with `get`, so opening the Documents UI never loads the whole
+    // workspace's document contents at once.
+    const [docs, projects] = await Promise.all([
+      ctx.db
+        .query("documents")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .take(300),
+      ctx.db
+        .query("projects")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .collect(),
+    ]);
     const projectName = new Map(projects.map((p) => [p._id, p.name]));
     return docs
       .map((d) => ({
         ...d,
+        content: d.content.slice(0, 400),
+        contentLength: d.content.length,
         projectName: d.projectId ? projectName.get(d.projectId) : undefined,
       }))
       .sort((a, b) => b.updatedAt - a.updatedAt);

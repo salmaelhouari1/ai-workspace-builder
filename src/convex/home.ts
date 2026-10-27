@@ -33,8 +33,10 @@ export const dashboard = query({
         .collect(),
       ctx.db
         .query("inboxItems")
-        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-        .collect(),
+        .withIndex("by_workspace_status", (q) =>
+          q.eq("workspaceId", workspaceId).eq("status", "pending"),
+        )
+        .take(50),
     ]);
 
     const now = Date.now();
@@ -341,7 +343,7 @@ export const dashboard = query({
       });
     }
 
-    const pendingInbox = inbox.filter((i) => i.status === "pending").length;
+    const pendingInbox = inbox.length;
     if (pendingInbox > 0) {
       insights.push({
         id: "inbox",

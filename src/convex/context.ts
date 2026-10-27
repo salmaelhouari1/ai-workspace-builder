@@ -11,8 +11,13 @@ import { relativeDayPhrase, utcDayStart } from "../lib/nlp";
  * against the actual question before sending anything to the model.
  */
 export const workspaceContext = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    // When the assistant runs inside the document editor, only that document
+    // carries its full body — every other document contributes an excerpt, so
+    // a long library never floods the function boundary.
+    focusDocumentId: v.optional(v.id("documents")),
+  },
+  handler: async (ctx, args) => {
     const session = await currentUserWorkspace(ctx);
     if (!session) return null;
     const { workspaceId } = session;
@@ -35,7 +40,7 @@ export const workspaceContext = query({
         ctx.db
           .query("documents")
           .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-          .collect(),
+          .take(30),
         ctx.db
           .query("inboxItems")
           .withIndex("by_workspace_status", (q) =>
@@ -132,12 +137,28 @@ export const workspaceContext = query({
       };
     });
 
-    const docItems = docs.map((d) => ({
+    // Focus doc may fall outside the 30-doc cap — fetch it explicitly and
+    // make sure the snapshot never loses the document being edited.
+    const focusedFetch =
+      args.focusDocumentId && !docs.some((d) => d._id === args.focusDocumentId)
+        ? await ctx.db.get(args.focusDocumentId)
+        : undefined;
+    const effectiveDocs =
+      focusedFetch &&
+      focusedFetch.workspaceId === workspaceId &&
+      focusedFetch._id === args.focusDocumentId
+        ? [...docs, focusedFetch]
+        : docs;
+    const docItems = effectiveDocs.map((d) => ({
       id: d._id as string,
       title: d.title,
       category: d.category,
       excerpt: d.content.slice(0, 600),
-      full: d.content,
+      // Full body only for the focused doc; others contribute excerpts only.
+      full:
+        args.focusDocumentId === d._id
+          ? focusedFetch?.content ?? d.content
+          : undefined,
     }));
 
     return {
@@ -153,7 +174,6 @@ export const workspaceContext = query({
       documents: docItems,
       pendingInbox: inbox.length,
       today: new Date(today).toISOString().slice(0, 10),
-      // helper for the action: resolve due strings when proposals come back
       taskTitles: [...taskById.entries()].map(([id, t]) => ({
         id,
         title: t.title,
@@ -171,12 +191,15 @@ export const conversationHistory = query({
     const conversation = await ctx.db.get(args.conversationId);
     if (!conversation || conversation.workspaceId !== session.workspaceId)
       return null;
-    const messages = await ctx.db
+    // Bounded history: only the most recent messages leave the database.
+    const messages = (await ctx.db
       .query("aiMessages")
       .withIndex("by_conversation", (q) =>
         q.eq("conversationId", args.conversationId),
       )
-      .collect();
-    return messages.sort((a, b) => a.createdAt - b.createdAt);
+      .order("desc")
+      .take(40))
+      .sort((a, b) => a.createdAt - b.createdAt);
+    return messages;
   },
 });
