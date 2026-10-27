@@ -44,6 +44,11 @@ const schema = defineSchema(
       isAnonymous: v.optional(v.boolean()), // is the user anonymous. do not remove
 
       role: v.optional(roleValidator), // role of the user. do not remove
+
+      // Recorded when the user accepts the Terms during registration;
+      // never set retroactively for accounts created before this field.
+      termsAcceptedVersion: v.optional(v.string()),
+      termsAcceptedAt: v.optional(v.number()),
     }).index("email", ["email"]), // index for the email. do not remove or modify
 
     // ------------------------------------------------------------------

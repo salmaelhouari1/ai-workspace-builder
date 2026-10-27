@@ -15,9 +15,13 @@ import {
 } from "@/components/ui/input-otp";
 
 import { useAuth } from "@/hooks/use-auth";
+import { api } from "@/convex/_generated/api";
+import { Checkbox } from "@/components/ui/checkbox";
+import { LEGAL_VERSION } from "@/lib/legal";
 import logo from "@/assets/logo.svg";
 import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
 import { Suspense, useEffect, useRef, useState } from "react";
+import { useMutation } from "convex/react";
 import { useNavigate, useSearchParams } from "react-router";
 
 interface AuthProps {
@@ -98,6 +102,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [resendIn, setResendIn] = useState(0);
+  // Terms acceptance is an explicit, un-preselected opt-in at registration.
+  // The choice is recorded server-side (version + timestamp) right after a
+  // successful verification — and never fabricated for users who skip it.
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const recordTerms = useMutation(api.account.recordTermsAcceptance);
 
   // Re-entry guards: React state updates are async, so a fast double-click or
   // Enter + auto-submit must be stopped with a ref, not with `isLoading`.
@@ -153,6 +162,12 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     event.preventDefault();
     const email = normalizeEmail(emailDraft);
     if (!email) return;
+    if (!termsAccepted) {
+      setError(
+        "Please accept the Terms of Service and Privacy Policy to continue — one look at them first is even better.",
+      );
+      return;
+    }
     const sent = await sendCode(email);
     if (sent) {
       setEmailDraft(email);
@@ -175,6 +190,9 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     setNotice(null);
     try {
       await signIn("email-otp", { email: step.email, code });
+      // Record the explicit acceptance (checkbox was required to get here).
+      // Best effort: a failed call must not block sign-in itself.
+      void recordTerms({ version: LEGAL_VERSION }).catch(() => {});
       // Tokens are set — navigate directly; the auth effect above is the fallback.
       navigate(redirect);
     } catch (err) {
@@ -290,10 +308,40 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                           <ArrowRight className="h-4 w-4" />
                         )}
                       </Button>
-                    </div>
-                    {error && (
+                    </div>                      {error && (
                       <p className="mt-2 text-sm text-red-500">{error}</p>
                     )}
+                    <label className="mt-4 flex items-start gap-2 text-xs leading-snug text-muted-foreground">
+                      <Checkbox
+                        checked={termsAccepted}
+                        onCheckedChange={(v) => {
+                          setTermsAccepted(v === true);
+                          if (error) setError(null);
+                        }}
+                        className="mt-0.5"
+                      />
+                      <span>
+                        I accept the{" "}
+                        <a
+                          href="/terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-foreground"
+                        >
+                          Terms of Service
+                        </a>{" "}
+                        and{" "}
+                        <a
+                          href="/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-foreground"
+                        >
+                          Privacy Policy
+                        </a>
+                        .
+                      </span>
+                    </label>
 
                     <div className="mt-4">
                       <div className="relative">
@@ -411,15 +459,24 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
             )}
 
             <div className="py-4 px-6 text-xs text-center text-muted-foreground bg-muted border-t rounded-b-lg">
-              Secured by{" "}
-              <a
-                href="https://freebuff.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-primary transition-colors"
-              >
-                freebuff.com
-              </a>
+              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                <a href="/privacy" className="hover:text-foreground">Privacy</a>
+                <a href="/terms" className="hover:text-foreground">Terms</a>
+                <a href="/cookies" className="hover:text-foreground">Cookies</a>
+                <a href="/ai-disclaimer" className="hover:text-foreground">AI Disclaimer</a>
+                <a href="/data-deletion" className="hover:text-foreground">Data Deletion</a>
+              </div>
+              <p className="mt-2">
+                Secured by{" "}
+                <a
+                  href="https://freebuff.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-primary transition-colors"
+                >
+                  freebuff.com
+                </a>
+              </p>
             </div>
           </Card>
         </div>

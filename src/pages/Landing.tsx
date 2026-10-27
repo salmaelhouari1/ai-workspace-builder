@@ -1,5 +1,7 @@
 import { BrandMark, Wordmark } from "@/components/Brand";
 import { Button } from "@/components/ui/button";
+import { CookieSettingsLink } from "@/components/CookieConsent";
+import { LEGAL_ROUTES } from "@/lib/legal";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
@@ -634,13 +636,25 @@ export default function Landing() {
             © {new Date().getFullYear()} OCIVO — a workspace that understands
             what you're doing.
           </p>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <a href="#how" className="hover:text-foreground">How it works</a>
             <a href="#features" className="hover:text-foreground">Features</a>
             <button onClick={() => navigate(startHref)} className="hover:text-foreground">
               Get started
             </button>
           </div>
+        </div>
+        <div className="mx-auto mt-6 flex w-full max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-1 border-t border-border/40 px-5 pt-5 text-xs text-muted-foreground">
+          {LEGAL_ROUTES.map((route) => (
+            <Link
+              key={route.path}
+              to={route.path}
+              className="transition-colors hover:text-foreground"
+            >
+              {route.label}
+            </Link>
+          ))}
+          <CookieSettingsLink className="transition-colors hover:text-foreground" />
         </div>
       </footer>
     </motion.div>

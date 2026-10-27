@@ -1,5 +1,6 @@
 import '@vly-ai/integrations';
 import { Toaster } from "@/components/ui/sonner";
+import CookieConsent from "@/components/CookieConsent";
 import { RequireAuth } from "@/components/RequireAuth";
 import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
@@ -15,6 +16,12 @@ const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const AppRoot = lazy(() => import("./pages/app/AppRoot.tsx"));
 const Onboarding = lazy(() => import("./pages/app/Onboarding.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+const Privacy = lazy(() => import("./pages/legal/Privacy.tsx"));
+const Terms = lazy(() => import("./pages/legal/Terms.tsx"));
+const Cookies = lazy(() => import("./pages/legal/Cookies.tsx"));
+const AcceptableUse = lazy(() => import("./pages/legal/AcceptableUse.tsx"));
+const AiDisclaimer = lazy(() => import("./pages/legal/AiDisclaimer.tsx"));
+const DataDeletion = lazy(() => import("./pages/legal/DataDeletion.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
@@ -118,6 +125,7 @@ createRoot(document.getElementById("root")!).render(
       <ConvexAuthProvider client={convex}>
         <BrowserRouter>
           <RouteSyncer />
+          <CookieConsent />
           <Suspense fallback={<RouteLoading />}>
             <Routes>
               <Route path="/" element={<Landing />} />
@@ -142,6 +150,13 @@ createRoot(document.getElementById("root")!).render(
                 }
               />
               <Route path="/dashboard" element={<Navigate to="/app" replace />} />
+              {/* Legal — public, indexable, lazy. */}
+              <Route path="/privacy" element={<Privacy />} />
+              <Route path="/terms" element={<Terms />} />
+              <Route path="/cookies" element={<Cookies />} />
+              <Route path="/acceptable-use" element={<AcceptableUse />} />
+              <Route path="/ai-disclaimer" element={<AiDisclaimer />} />
+              <Route path="/data-deletion" element={<DataDeletion />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

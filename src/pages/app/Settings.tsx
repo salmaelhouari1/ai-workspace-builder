@@ -5,23 +5,134 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import { TYPE_DISPLAY, typeDisplay } from "@/lib/modules";
+import { CookieSettingsLink } from "@/components/CookieConsent";
 import { cn } from "@/lib/utils";
 import {
   Activity,
   Bot,
   Building2,
   LogOut,
+  ShieldAlert,
   Sparkles,
   UserRound,
   UserPlus,
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQuery } from "convex/react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+
+/**
+ * Self-service account deletion (described on /data-deletion).
+ *
+ * Owners delete the entire workspace; non-owner members leave the workspace
+ * and delete their own account. Both flows go through the same hard cascade
+ * mutation — there is no export step before deletion.
+ */
+function DangerZone({ workspaceName }: { workspaceName: string }) {
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+  const deleteMe = useMutation(api.account.deleteMe);
+  const [open, setOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const deleteAccount = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await deleteMe({ confirmName: confirmText });
+      toast.success("Account deleted", {
+        description: "Your data was removed permanently. Goodbye.",
+      });
+      await signOut();
+      navigate("/");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      toast.error(
+        msg.replace(/^.*Error:\s*/, "") || "Couldn't delete the account",
+      );
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mt-5 rounded-2xl border border-destructive/30 bg-card p-5">
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-destructive">
+        <ShieldAlert className="size-4" />
+        Danger zone
+      </h2>
+      {open ? (
+        <div className="mt-4">
+          <p className="text-sm leading-relaxed">
+            This permanently deletes{" "}
+            <strong>{workspaceName}</strong> and every project, task, goal,
+            document, inbox entry and AI conversation in it — plus your account
+            and sign-in records. This cannot be undone, and there is no export
+            step.
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Type the workspace name to confirm:
+          </p>
+          <Input
+            className="mt-2"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={workspaceName}
+            autoComplete="off"
+          />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={busy || confirmText.trim() !== workspaceName}
+              onClick={() => void deleteAccount()}
+            >
+              {busy ? "Deleting…" : "Delete my account permanently"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => {
+                setOpen(false);
+                setConfirmText("");
+              }}
+              disabled={busy}
+            >
+              Keep my account
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm leading-snug text-muted-foreground">
+            Delete your account and everything in this workspace. Details on
+            the{" "}
+            <a
+              href="/data-deletion"
+              className="underline hover:text-foreground"
+            >
+              Data Deletion page
+            </a>
+            .
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-destructive/40 text-destructive hover:text-destructive"
+            onClick={() => setOpen(true)}
+          >
+            Delete account…
+          </Button>
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -43,7 +154,12 @@ export default function Settings() {
   const [emailDraft, setEmailDraft] = useState("");
   const [adding, setAdding] = useState(false);
 
-  useEffect(() => {
+  // Sync the form from the workspace record — React's "adjust state during
+  // render" pattern. Runs while the user isn't editing, so a live update
+  // never clobbers their typing.
+  const [syncedWorkspace, setSyncedWorkspace] = useState(workspace);
+  if (workspace !== syncedWorkspace) {
+    setSyncedWorkspace(workspace);
     if (workspace && !dirty) {
       setName(workspace.name);
       setMainGoal(workspace.mainGoal ?? "");
@@ -51,8 +167,7 @@ export default function Settings() {
       setTeamSize(workspace.teamSize ?? "Just me");
       setStage(workspace.stage ?? "Getting started");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspace]);
+  }
 
   const save = async () => {
     setSaving(true);
@@ -341,6 +456,9 @@ export default function Settings() {
         </div>
       </section>
 
+      {/* Danger zone — self-service account + workspace deletion */}
+      <DangerZone workspaceName={workspace.name} />
+
       {/* Activity */}
       <section className="mt-5 rounded-2xl border border-border/70 bg-card p-5">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -400,10 +518,21 @@ export default function Settings() {
         </div>
       </section>
 
+<footer className="mt-5">
       <p className="mt-6 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
         <Bot className="size-3.5" />
         OCIVO — your workspace builds itself.
       </p>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <a href="/privacy" className="hover:text-foreground">Privacy Policy</a>
+        <a href="/terms" className="hover:text-foreground">Terms</a>
+        <a href="/cookies" className="hover:text-foreground">Cookie Policy</a>
+        <a href="/acceptable-use" className="hover:text-foreground">Acceptable Use</a>
+        <a href="/ai-disclaimer" className="hover:text-foreground">AI Disclaimer</a>
+        <a href="/data-deletion" className="hover:text-foreground">Data Deletion</a>
+        <CookieSettingsLink className="hover:text-foreground" />
+      </div>
+    </footer>
     </div>
   );
 }
