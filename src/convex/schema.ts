@@ -243,6 +243,106 @@ const schema = defineSchema(
       route: v.optional(v.string()),
       createdAt: v.number(),
     }).index("by_workspace", ["workspaceId"]),
+
+    marketingEntries: defineTable({
+      workspaceId: v.id("workspaces"),
+      title: v.string(),
+      // Content type: post, article, thread, script, ad, newsletter…
+      contentType: v.string(),
+      platform: v.string(), // "instagram" | "tiktok" | "linkedin" | "facebook" | "pinterest" | "other"
+      // Markdown caption / body.
+      body: v.string(),
+      hook: v.optional(v.string()),
+      callToAction: v.optional(v.string()),
+      // Optional creative brief / asset reference (e.g. a document id).
+      creativeBrief: v.optional(v.string()),
+      // One of the five lifecycle statuses (statuses are the single source
+      // of truth for the planner).
+      status: v.union(
+        v.literal("idea"),
+        v.literal("draft"),
+        v.literal("planned"),
+        v.literal("readyToPublish"),
+        v.literal("published"),
+      ),
+      // ISO-8601 local date-time for scheduling. A planned/ready draft uses
+      // this to show up on the calendar.
+      scheduledAt: v.optional(v.number()),
+      // Which campaign this entry belongs to (NULL = standalone).
+      campaignId: v.optional(v.id("campaigns")),
+      // The content pillar this entry serves — a business-chosen lens
+      // (e.g. "education", "product" , "offer").
+      pillar: v.optional(v.string()),
+      // Free-form tags.
+      tags: v.array(v.string()),
+      // Who the content is for, a short audience descriptor used by the AI.
+      audience: v.optional(v.string()),
+      // Owner + timestamp for optimistic UI, filtering and reports.
+      workspaceMemberId: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_workspace", ["workspaceId"])
+      .index("by_workspace_status", ["workspaceId", "status"])
+      .index("by_campaign", ["campaignId"]),
+
+    marketingIdeas: defineTable({
+      workspaceId: v.id("workspaces"),
+      title: v.string(),
+      description: v.optional(v.string()),
+      // Content type the idea should become.
+      contentType: v.string(),
+      platform: v.string(),
+      pillar: v.optional(v.string()),
+      campaignId: v.optional(v.id("campaigns")),
+      tags: v.array(v.string()),
+      workspaceMemberId: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      // When an idea is converted into a draft, this links to the new
+      // marketingEntry; null means it is still an idea only.
+      convertedTo: v.optional(v.id("marketingEntries")),
+    })
+      .index("by_workspace", ["workspaceId"])
+      .index("by_workspace_status", ["workspaceId", "convertedTo"]),
+
+    campaigns: defineTable({
+      workspaceId: v.id("workspaces"),
+      name: v.string(),
+      objective: v.optional(v.string()), // e.g. launch, awareness, retention
+      audience: v.optional(v.string()),
+      // ISO-8601 local date-time.
+      startDate: v.optional(v.number()),
+      endDate: v.optional(v.number()),
+      status: v.union(
+        v.literal("active"),
+        v.literal("paused"),
+        v.literal("completed"),
+        v.literal("archived"),
+      ),
+      notes: v.optional(v.string()),
+      // Link to an existing workspace goal so progress can be derived.
+      goalId: v.optional(v.id("goals")),
+      // Link to an existing workspace project so the campaign can live in
+      // ProjectDetail.
+      projectId: v.optional(v.id("projects")),
+      workspaceMemberId: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_workspace", ["workspaceId"])
+      .index("by_workspace_status", ["workspaceId", "status"]),
+
+    marketingSuggestions: defineTable({
+      workspaceId: v.id("workspaces"),
+      // Deterministic counter so the AI can show "keep sync" later.
+      suggestionName: v.string(),
+      // The user-approved proposal, stored as Markdown.
+      content: v.string(),
+      workspaceMemberId: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    }).index("by_workspace", ["workspaceId"]),
   },
   {
     schemaValidation: false,

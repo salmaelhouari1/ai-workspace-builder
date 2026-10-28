@@ -34,6 +34,7 @@ const DEFAULT_LABELS: Record<string, string> = {
   documents: "Documents",
   goals: "Goals",
   ai: "AI Assistant",
+  marketing: "Marketing Planner",
   settings: "Settings",
 };
 
@@ -46,7 +47,21 @@ const ICONS: Record<string, LucideIcon> = {
   documents: FileText,
   goals: Target,
   ai: Sparkles,
+  marketing: Target,
   settings: Settings,
+};
+
+/** Always-on module entries (override the business-type labels for this key). */
+const MARKETING_LABELS: Record<string, string> = {
+  marketing: "Marketing Planner",
+};
+
+const MARKETING_ICONS: Record<string, LucideIcon> = {
+  marketing: Target,
+};
+
+const MARKETING_ROUTES: Record<string, string> = {
+  marketing: "/app/marketing",
 };
 
 const BADGES: Record<string, "inbox" | "tasks"> = {
@@ -91,6 +106,7 @@ const ORDER = [
   "documents",
   "goals",
   "ai",
+  "marketing",
 ];
 
 const ROUTES: Record<string, string> = {
@@ -102,18 +118,32 @@ const ROUTES: Record<string, string> = {
   documents: "/app/documents",
   goals: "/app/goals",
   ai: "/app/ai",
+  marketing: "/app/marketing",
   settings: "/app/settings",
 };
 
+/** Always-on module entries — they override the business-type labels. */
+/** Always-on module entries — they override the business-type labels. */
 export function navEntries(businessType?: string): NavEntry[] {
   const overrides = TYPE_LABELS[businessType ?? "general"] ?? {};
-  return ORDER.map((key) => ({
+  const result = ORDER.map((key) => ({
     key,
     label: overrides[key] ?? DEFAULT_LABELS[key],
     to: ROUTES[key],
     icon: ICONS[key],
     badge: BADGES[key],
   }));
+  // The Marketing Planner module is always on — add it if it's not already there.
+  if (!result.some((e) => e.key === "marketing")) {
+    result.push({
+      key: "marketing",
+      label: "Marketing Planner",
+      to: "/app/marketing",
+      icon: Target,
+      badge: undefined as any,
+    });
+  }
+  return result;
 }
 
 export function settingsEntry(businessType?: string): NavEntry {
