@@ -10,6 +10,7 @@ import Documents from "./Documents";
 import Goals from "./Goals";
 import Home from "./Home";
 import InboxPage from "./Inbox";
+import Marketing from "./Marketing";
 import ProjectDetail from "./ProjectDetail";
 import Projects from "./Projects";
 import Settings from "./Settings";
@@ -53,6 +54,7 @@ export default function AppRoot() {
         <Route path="documents" element={<Documents />} />
         <Route path="documents/:id" element={<DocumentEditor />} />
         <Route path="goals" element={<Goals />} />
+        <Route path="marketing" element={<Marketing />} />
         <Route path="ai" element={<Assistant />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/app" replace />} />

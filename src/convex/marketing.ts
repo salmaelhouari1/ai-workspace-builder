@@ -48,15 +48,18 @@ export const list = query({
     const entries = await ctx.db
       .query("marketingEntries")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-      .orderBy("scheduledAt", "desc")
       .collect();
-    return entries.map((e) => ({
-      ...e,
-      scheduledAt: e.scheduledAt ?? null,
-      campaignName: e.campaignId
-        ? (await ctx.db.get(e.campaignId))?.name ?? null
-        : null,
-    }));
+    entries.sort((a, b) => (b.scheduledAt ?? 0) - (a.scheduledAt ?? 0));
+    return await Promise.all(
+      entries.map(async (e) => {
+        const campaign = e.campaignId ? await ctx.db.get(e.campaignId) : null;
+        return {
+          ...e,
+          scheduledAt: e.scheduledAt ?? null,
+          campaignName: campaign?.name ?? null,
+        };
+      }),
+    );
   },
 });
 
@@ -76,13 +79,16 @@ export const listByStatus = query({
         q.eq("workspaceId", workspaceId).eq("status", args.status)
       )
       .collect();
-    return entries.map((e) => ({
-      ...e,
-      scheduledAt: e.scheduledAt ?? null,
-      campaignName: e.campaignId
-        ? (await ctx.db.get(e.campaignId))?.name ?? null
-        : null,
-    }));
+    return await Promise.all(
+      entries.map(async (e) => {
+        const campaign = e.campaignId ? await ctx.db.get(e.campaignId) : null;
+        return {
+          ...e,
+          scheduledAt: e.scheduledAt ?? null,
+          campaignName: campaign?.name ?? null,
+        };
+      }),
+    );
   },
 });
 
@@ -123,7 +129,7 @@ const createEntry = mutation({
     workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { workspaceId } = await requireWorkspace(ctx);
+    const { userId, workspaceId } = await requireWorkspace(ctx);
     if (args.title.trim().length === 0) throw new Error("Title is required");
     if (!SUPPORTED_PLATFORMS.includes(args.platform as typeof SUPPORTED_PLATFORMS[number])) {
       throw new Error("Unsupported platform");
@@ -135,6 +141,24 @@ const createEntry = mutation({
       }
     }
     const now = Date.now();
+    const title = args.title.trim().slice(0, MAX_TITLE);
+    const platform = normalizePlatform(args.platform);
+    // Double-submit guard: reject an identical record created moments ago.
+    const recentEntries = await ctx.db
+      .query("marketingEntries")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+      .collect();
+    if (
+      recentEntries.some(
+        (e) =>
+          e.title === title &&
+          e.platform === platform &&
+          (e.campaignId ?? null) === (args.campaignId ?? null) &&
+          now - e.createdAt < 15_000,
+      )
+    ) {
+      throw new Error("This content was just created — possible duplicate submission");
+    }
     const id = await ctx.db.insert("marketingEntries", {
       workspaceId,
       title: args.title.trim().slice(0, MAX_TITLE),
@@ -150,7 +174,8 @@ const createEntry = mutation({
       pillar: args.pillar?.trim().slice(0, 80),
       tags: args.tags ?? [],
       audience: args.audience?.trim().slice(0, 160),
-      workspaceMemberId: args.workspaceMemberId,
+      // Owner is derived from the session — never from client input.
+      workspaceMemberId: userId,
       createdAt: now,
       updatedAt: now,
     });
@@ -177,8 +202,10 @@ const updateEntry = mutation({
         v.literal("published"),
       ),
     ),
-    scheduledAt: v.optional(v.number()),
-    campaignId: v.optional(v.id("campaigns")),
+    // null clears the schedule; omit to leave it unchanged.
+    scheduledAt: v.optional(v.union(v.number(), v.null())),
+    // null explicitly unlinks the campaign; omit to leave it unchanged.
+    campaignId: v.optional(v.union(v.id("campaigns"), v.null())),
     pillar: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     audience: v.optional(v.string()),
@@ -189,19 +216,21 @@ const updateEntry = mutation({
     if (!entry) throw new Error("Entry not found");
     await assertMember(ctx, entry.workspaceId);
 
-    if (args.campaignId !== undefined) {
+    if (args.campaignId) {
       const campaign = await ctx.db.get(args.campaignId);
       if (!campaign || campaign.workspaceId !== entry.workspaceId) {
         throw new Error("Unknown campaign");
       }
     }
     if (args.campaignId && args.campaignId !== entry.campaignId) {
-      const existing = await ctx.db
+      const campaignId = args.campaignId;
+      const siblings = await ctx.db
         .query("marketingEntries")
-        .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
-        .filter((e) => e._id !== args.entryId)
-        .filter((e) => e.title === entry.title)
-        .first();
+        .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
+        .collect();
+      const existing = siblings.find(
+        (e) => e._id !== args.entryId && e.title === entry.title,
+      );
       if (existing) throw new Error("A content entry with this title already exists under the campaign");
     }
 
@@ -214,12 +243,12 @@ const updateEntry = mutation({
     if (args.callToAction !== undefined) patch.callToAction = args.callToAction.trim().slice(0, MAX_TITLE);
     if (args.creativeBrief !== undefined) patch.creativeBrief = args.creativeBrief.trim().slice(0, 2000);
     if (args.status !== undefined) patch.status = args.status;
-    if (args.scheduledAt !== undefined) patch.scheduledAt = args.scheduledAt;
+    if (args.scheduledAt !== undefined) patch.scheduledAt = args.scheduledAt ?? undefined;
     if (args.pillar !== undefined) patch.pillar = args.pillar.trim().slice(0, 80);
     if (args.tags !== undefined) patch.tags = args.tags;
     if (args.audience !== undefined) patch.audience = args.audience.trim().slice(0, 160);
     if (args.workspaceMemberId !== undefined) patch.workspaceMemberId = args.workspaceMemberId;
-    if (args.campaignId !== undefined) patch.campaignId = args.campaignId;
+    if (args.campaignId !== undefined) patch.campaignId = args.campaignId ?? undefined;
 
     await ctx.db.patch(args.entryId, patch);
     return { ok: true };
@@ -252,8 +281,8 @@ export const listIdeas = query({
     const ideas = await ctx.db
       .query("marketingIdeas")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-      .orderBy("updatedAt", "desc")
       .collect();
+    ideas.sort((a, b) => b.updatedAt - a.updatedAt);
     return ideas.map((i) => ({
       ...i,
       convertedTo: i.convertedTo ?? null,
@@ -271,7 +300,7 @@ export const getIdea = query({
   },
 });
 
-const createIdea = mutation({
+export const createIdea = mutation({
   args: {
     title: v.string(),
     description: v.optional(v.string()),
@@ -283,7 +312,7 @@ const createIdea = mutation({
     workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { workspaceId } = await requireWorkspace(ctx);
+    const { userId, workspaceId } = await requireWorkspace(ctx);
     if (args.title.trim().length === 0) throw new Error("Idea title is required");
     if (!SUPPORTED_PLATFORMS.includes(args.platform as typeof SUPPORTED_PLATFORMS[number])) {
       throw new Error("Unsupported platform");
@@ -295,6 +324,24 @@ const createIdea = mutation({
       }
     }
     const now = Date.now();
+    const title = args.title.trim().slice(0, MAX_TITLE);
+    const platform = normalizePlatform(args.platform);
+    // Double-submit guard: reject an identical idea created moments ago.
+    const recentIdeas = await ctx.db
+      .query("marketingIdeas")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+      .collect();
+    if (
+      recentIdeas.some(
+        (i) =>
+          i.title === title &&
+          i.platform === platform &&
+          (i.campaignId ?? null) === (args.campaignId ?? null) &&
+          now - i.createdAt < 15_000,
+      )
+    ) {
+      throw new Error("This idea was just created — possible duplicate submission");
+    }
     const id = await ctx.db.insert("marketingIdeas", {
       workspaceId,
       title: args.title.trim().slice(0, MAX_TITLE),
@@ -304,7 +351,7 @@ const createIdea = mutation({
       pillar: args.pillar?.trim().slice(0, 80),
       campaignId: args.campaignId,
       tags: args.tags ?? [],
-      workspaceMemberId: args.workspaceMemberId,
+      workspaceMemberId: userId,
       createdAt: now,
       updatedAt: now,
     });
@@ -312,7 +359,7 @@ const createIdea = mutation({
   },
 });
 
-const updateIdea = mutation({
+export const updateIdea = mutation({
   args: {
     ideaId: v.id("marketingIdeas"),
     title: v.optional(v.string()),
@@ -320,7 +367,8 @@ const updateIdea = mutation({
     contentType: v.optional(v.string()),
     platform: v.optional(v.string()),
     pillar: v.optional(v.string()),
-    campaignId: v.optional(v.id("campaigns")),
+    // null explicitly unlinks the campaign; omit to leave it unchanged.
+    campaignId: v.optional(v.union(v.id("campaigns"), v.null())),
     tags: v.optional(v.array(v.string())),
     workspaceMemberId: v.optional(v.string()),
   },
@@ -329,19 +377,20 @@ const updateIdea = mutation({
     if (!idea) throw new Error("Idea not found");
     await assertMember(ctx, idea.workspaceId);
 
-    if (args.campaignId !== undefined) {
+    if (args.campaignId) {
       const campaign = await ctx.db.get(args.campaignId);
       if (!campaign || campaign.workspaceId !== idea.workspaceId) {
         throw new Error("Unknown campaign");
       }
     }
     if (args.campaignId && args.campaignId !== idea.campaignId) {
-      const existing = await ctx.db
+      const siblings = await ctx.db
         .query("marketingIdeas")
         .withIndex("by_workspace", (q) => q.eq("workspaceId", idea.workspaceId))
-        .filter((e) => e._id !== args.ideaId)
-        .filter((e) => e.title === idea.title)
-        .first();
+        .collect();
+      const existing = siblings.find(
+        (i) => i._id !== args.ideaId && i.title === idea.title,
+      );
       if (existing) throw new Error("An idea with this title already exists");
     }
 
@@ -351,7 +400,7 @@ const updateIdea = mutation({
     if (args.contentType !== undefined) patch.contentType = args.contentType.trim().slice(0, MAX_PLATFORM);
     if (args.platform !== undefined) patch.platform = normalizePlatform(args.platform);
     if (args.pillar !== undefined) patch.pillar = args.pillar.trim().slice(0, 80);
-    if (args.campaignId !== undefined) patch.campaignId = args.campaignId;
+    if (args.campaignId !== undefined) patch.campaignId = args.campaignId ?? undefined;
     if (args.tags !== undefined) patch.tags = args.tags;
     if (args.workspaceMemberId !== undefined) patch.workspaceMemberId = args.workspaceMemberId;
 
@@ -360,7 +409,7 @@ const updateIdea = mutation({
   },
 });
 
-const removeIdea = mutation({
+export const removeIdea = mutation({
   args: { ideaId: v.id("marketingIdeas") },
   handler: async (ctx, args) => {
     const idea = await ctx.db.get(args.ideaId);
@@ -371,9 +420,45 @@ const removeIdea = mutation({
   },
 });
 
-export const createIdea = createIdea;
-export const updateIdea = updateIdea;
-export const removeIdea = removeIdea;
+/**
+ * Convert an idea into a content draft — one-way, deduplicated. The idea row
+ * is kept (nothing is lost) and links to the new entry via `convertedTo`.
+ */
+export const convertIdea = mutation({
+  args: { ideaId: v.id("marketingIdeas") },
+  handler: async (ctx, args) => {
+    const idea = await ctx.db.get(args.ideaId);
+    if (!idea) throw new Error("Idea not found");
+    const userId = await assertMember(ctx, idea.workspaceId);
+
+    if (idea.convertedTo) {
+      const existing = await ctx.db.get(idea.convertedTo);
+      if (existing) {
+        throw new Error("This idea has already been converted into a draft");
+      }
+    }
+
+    const now = Date.now();
+    const entryId = await ctx.db.insert("marketingEntries", {
+      workspaceId: idea.workspaceId,
+      title: idea.title,
+      contentType: idea.contentType,
+      platform: idea.platform,
+      body: idea.description ?? "",
+      status: "draft",
+      campaignId: idea.campaignId,
+      pillar: idea.pillar,
+      tags: idea.tags,
+      workspaceMemberId: userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(args.ideaId, { convertedTo: entryId, updatedAt: now });
+    return entryId;
+  },
+});
+
+
 
 // ---------------------------------------------------------------------------
 // campaigns
@@ -386,48 +471,34 @@ export const listCampaigns = query({
     const campaigns = await ctx.db
       .query("campaigns")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-      .orderBy("startDate", "asc")
       .collect();
-    const entryIds = [] as string[];
-    for (const c of campaigns) {
-      const entries = await ctx.db
+    campaigns.sort(
+      (a, b) =>
+        (a.startDate ?? Number.MAX_SAFE_INTEGER) -
+        (b.startDate ?? Number.MAX_SAFE_INTEGER),
+    );
+
+    const [allEntries, allIdeas] = await Promise.all([
+      ctx.db
         .query("marketingEntries")
-        .withIndex("by_campaign", (q) => q.eq("campaignId", c._id))
-        .collect();
-      entryIds.push(...entries.map((e) => e._id));
-    }
-    const ideaById = new Map<string, any>();
-    const ideas = await ctx.db
-      .query("marketingIdeas")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-      .collect();
-    for (const i of ideas) ideaById.set(i._id, i);
-
-    const entries = await ctx.db
-      .query("marketingEntries")
-      .filter((e) => entryIds.includes(e._id))
-      .collect();
-
-    const entryCount = new Map<string, number>();
-    for (const e of entries) {
-      const c = entryCount.get(e.campaignId ?? "") ?? 0;
-      entryCount.set(e.campaignId ?? "", c + 1);
-    }
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .collect(),
+      ctx.db
+        .query("marketingIdeas")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .collect(),
+    ]);
 
     return campaigns.map((c) => {
-      const entries = entries.filter((e) => e.campaignId === c._id);
-      const ideas = ideas.filter((i) => i.campaignId === c._id);
-      const drafts = entries.filter((e) => e.status === "draft").length;
-      const published = entries.filter((e) => e.status === "published").length;
-      const planned = entries.filter((e) => e.status === "planned").length;
-      const ready = entries.filter((e) => e.status === "readyToPublish").length;
+      const entries = allEntries.filter((e) => e.campaignId === c._id);
+      const ideas = allIdeas.filter((i) => i.campaignId === c._id);
       return {
         ...c,
         entryCount: entries.length,
-        draftCount: drafts,
-        plannedCount: planned,
-        readyCount: ready,
-        publishedCount: published,
+        draftCount: entries.filter((e) => e.status === "draft").length,
+        plannedCount: entries.filter((e) => e.status === "planned").length,
+        readyCount: entries.filter((e) => e.status === "readyToPublish").length,
+        publishedCount: entries.filter((e) => e.status === "published").length,
         ideaCount: ideas.length,
         entryIds: entries.map((e) => e._id),
       };
@@ -446,11 +517,15 @@ export const getCampaign = query({
       .query("marketingEntries")
       .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
       .collect();
-    const ideas = await ctx.db
-      .query("marketingIdeas")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", campaign.workspaceId))
-      .filter((i) => i.campaignId === args.campaignId)
-      .collect();
+    const campaignId = args.campaignId;
+    const ideas = (
+      await ctx.db
+        .query("marketingIdeas")
+        .withIndex("by_workspace", (q) =>
+          q.eq("workspaceId", campaign.workspaceId),
+        )
+        .collect()
+    ).filter((i) => i.campaignId === campaignId);
 
     const entryCount = new Map<string, number>();
     for (const e of entries) {
@@ -472,7 +547,7 @@ export const getCampaign = query({
   },
 });
 
-const createCampaign = mutation({
+export const createCampaign = mutation({
   args: {
     name: v.string(),
     objective: v.optional(v.string()),
@@ -491,7 +566,7 @@ const createCampaign = mutation({
     workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { workspaceId } = await requireWorkspace(ctx);
+    const { userId, workspaceId } = await requireWorkspace(ctx);
     if (args.name.trim().length === 0) throw new Error("Campaign name is required");
     if (args.goalId) {
       const goal = await ctx.db.get(args.goalId);
@@ -502,6 +577,19 @@ const createCampaign = mutation({
       if (!project || project.workspaceId !== workspaceId) throw new Error("Unknown project");
     }
     const now = Date.now();
+    const name = args.name.trim().slice(0, MAX_TITLE);
+    // Double-submit guard: reject an identical campaign created moments ago.
+    const recentCampaigns = await ctx.db
+      .query("campaigns")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+      .collect();
+    if (
+      recentCampaigns.some(
+        (c) => c.name === name && now - c.createdAt < 15_000,
+      )
+    ) {
+      throw new Error("This campaign was just created — possible duplicate submission");
+    }
     const id = await ctx.db.insert("campaigns", {
       workspaceId,
       name: args.name.trim().slice(0, MAX_TITLE),
@@ -513,7 +601,7 @@ const createCampaign = mutation({
       notes: args.notes?.trim().slice(0, 2000),
       goalId: args.goalId,
       projectId: args.projectId,
-      workspaceMemberId: args.workspaceMemberId,
+      workspaceMemberId: userId,
       createdAt: now,
       updatedAt: now,
     });
@@ -521,14 +609,15 @@ const createCampaign = mutation({
   },
 });
 
-const updateCampaign = mutation({
+export const updateCampaign = mutation({
   args: {
     campaignId: v.id("campaigns"),
     name: v.optional(v.string()),
     objective: v.optional(v.string()),
     audience: v.optional(v.string()),
-    startDate: v.optional(v.number()),
-    endDate: v.optional(v.number()),
+    // null clears the date; omit to leave it unchanged.
+    startDate: v.optional(v.union(v.number(), v.null())),
+    endDate: v.optional(v.union(v.number(), v.null())),
     status: v.optional(
       v.union(
         v.literal("active"),
@@ -538,8 +627,9 @@ const updateCampaign = mutation({
       ),
     ),
     notes: v.optional(v.string()),
-    goalId: v.optional(v.id("goals")),
-    projectId: v.optional(v.id("projects")),
+    // null unlinks; omit to leave it unchanged.
+    goalId: v.optional(v.union(v.id("goals"), v.null())),
+    projectId: v.optional(v.union(v.id("projects"), v.null())),
     workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -547,11 +637,11 @@ const updateCampaign = mutation({
     if (!campaign) throw new Error("Campaign not found");
     await assertMember(ctx, campaign.workspaceId);
 
-    if (args.goalId !== undefined) {
+    if (args.goalId) {
       const goal = await ctx.db.get(args.goalId);
       if (!goal || goal.workspaceId !== campaign.workspaceId) throw new Error("Unknown goal");
     }
-    if (args.projectId !== undefined) {
+    if (args.projectId) {
       const project = await ctx.db.get(args.projectId);
       if (!project || project.workspaceId !== campaign.workspaceId) throw new Error("Unknown project");
     }
@@ -560,12 +650,12 @@ const updateCampaign = mutation({
     if (args.name !== undefined) patch.name = args.name.trim().slice(0, MAX_TITLE);
     if (args.objective !== undefined) patch.objective = args.objective.trim().slice(0, 200);
     if (args.audience !== undefined) patch.audience = args.audience.trim().slice(0, 200);
-    if (args.startDate !== undefined) patch.startDate = args.startDate;
-    if (args.endDate !== undefined) patch.endDate = args.endDate;
+    if (args.startDate !== undefined) patch.startDate = args.startDate ?? undefined;
+    if (args.endDate !== undefined) patch.endDate = args.endDate ?? undefined;
     if (args.status !== undefined) patch.status = args.status;
     if (args.notes !== undefined) patch.notes = args.notes.trim().slice(0, 2000);
-    if (args.goalId !== undefined) patch.goalId = args.goalId;
-    if (args.projectId !== undefined) patch.projectId = args.projectId;
+    if (args.goalId !== undefined) patch.goalId = args.goalId ?? undefined;
+    if (args.projectId !== undefined) patch.projectId = args.projectId ?? undefined;
     if (args.workspaceMemberId !== undefined) patch.workspaceMemberId = args.workspaceMemberId;
 
     await ctx.db.patch(args.campaignId, patch);
@@ -573,7 +663,7 @@ const updateCampaign = mutation({
   },
 });
 
-const removeCampaign = mutation({
+export const removeCampaign = mutation({
   args: { campaignId: v.id("campaigns") },
   handler: async (ctx, args) => {
     const campaign = await ctx.db.get(args.campaignId);
@@ -584,9 +674,7 @@ const removeCampaign = mutation({
   },
 });
 
-export const createCampaign = createCampaign;
-export const updateCampaign = updateCampaign;
-export const removeCampaign = removeCampaign;
+
 
 // ---------------------------------------------------------------------------
 // marketingSuggestions (stored AI proposals)
@@ -599,9 +687,9 @@ export const listSuggestions = query({
     const suggestions = await ctx.db
       .query("marketingSuggestions")
       .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-      .orderBy("createdAt", "desc")
       .collect();
-    return suggestions.map((s) => ({ ...s, suggestionName: s.suggestionName }));
+    suggestions.sort((a, b) => b.createdAt - a.createdAt);
+    return suggestions;
   },
 });
 
@@ -615,20 +703,20 @@ export const getSuggestion = query({
   },
 });
 
-const createSuggestion = mutation({
+export const createSuggestion = mutation({
   args: {
     suggestionName: v.string(),
     content: v.string(),
     workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { workspaceId } = await requireWorkspace(ctx);
+    const { userId, workspaceId } = await requireWorkspace(ctx);
     const now = Date.now();
     const id = await ctx.db.insert("marketingSuggestions", {
       workspaceId,
       suggestionName: args.suggestionName.trim().slice(0, 200),
       content: args.content,
-      workspaceMemberId: args.workspaceMemberId,
+      workspaceMemberId: userId,
       createdAt: now,
       updatedAt: now,
     });
@@ -636,4 +724,4 @@ const createSuggestion = mutation({
   },
 });
 
-export const createSuggestion = createSuggestion;
+
