@@ -5,6 +5,7 @@ import { LEGAL_ROUTES } from "@/lib/legal";
 import { motion } from "framer-motion";
 import {
   ArrowRight,
+  CalendarDays,
   Check,
   ClipboardList,
   Command,
@@ -12,8 +13,11 @@ import {
   FolderKanban,
   Inbox,
   Layers,
+  Lightbulb,
+  Megaphone,
   MessageSquare,
   MousePointerClick,
+  PenLine,
   Search,
   ShieldCheck,
   Sparkles,
@@ -106,6 +110,29 @@ const FEATURES = [
   },
 ];
 
+const MARKETING_POINTS = [
+  {
+    icon: CalendarDays,
+    title: "Content calendar",
+    body: "Month, week and list views of everything you've planned — filtered by platform, status or campaign.",
+  },
+  {
+    icon: Lightbulb,
+    title: "Idea → draft",
+    body: "Capture ideas as they come, then convert one into an editable draft when you're ready to write.",
+  },
+  {
+    icon: FolderKanban,
+    title: "Campaigns that stay linked",
+    body: "Group content around a launch and connect each campaign to the goal or project it serves.",
+  },
+  {
+    icon: PenLine,
+    title: "Drafts with assistant help",
+    body: "Ask for a hook, a caption or a CTA — it writes into the draft, and you edit every word.",
+  },
+];
+
 const EXAMPLE_PROJECTS = [
   { name: "Client A Website", progress: 75 },
   { name: "Portfolio Redesign", progress: 40 },
@@ -117,6 +144,10 @@ export default function Landing() {
   const { isAuthenticated, isLoading } = useAuth();
 
   const startHref = isAuthenticated && !isLoading ? "/app" : "/auth?returnTo=/app";
+  const plannerHref =
+    isAuthenticated && !isLoading
+      ? "/app/marketing"
+      : "/auth?returnTo=/app/marketing";
 
   return (
     <motion.div
@@ -136,6 +167,7 @@ export default function Landing() {
           <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
             <a href="#how" className="transition-colors hover:text-foreground">How it works</a>
             <a href="#features" className="transition-colors hover:text-foreground">Features</a>
+            <a href="#planner" className="transition-colors hover:text-foreground">Planner</a>
             <a href="#example" className="transition-colors hover:text-foreground">Example</a>
           </nav>
 
@@ -436,6 +468,169 @@ export default function Landing() {
               );
             })}
           </div>
+        </div>
+      </section>
+
+      {/* ================= MARKETING PLANNER ================= */}
+      <section id="planner" className="mx-auto w-full max-w-6xl px-5 py-16 md:py-24">
+        <div className="grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-14">
+          <motion.div {...fadeUp}>
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+              <Megaphone className="size-3.5" />
+              New · Marketing planner
+            </p>
+            <h2 className="mt-3 font-display text-3xl tracking-tight md:text-5xl">
+              Turn your marketing ideas into a plan you can actually execute.
+            </h2>
+            <p className="mt-5 max-w-lg text-sm leading-relaxed text-muted-foreground md:text-base">
+              Campaigns, a content calendar and a home for every idea — with
+              the assistant helping you draft along the way. Platforms are
+              planning labels, and nothing is ever published without you.
+            </p>
+
+            <div className="mt-7 grid gap-4 sm:grid-cols-2">
+              {MARKETING_POINTS.map((point) => (
+                <div
+                  key={point.title}
+                  className="rounded-2xl border border-border/70 bg-card p-4"
+                >
+                  <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <point.icon className="size-4" />
+                  </span>
+                  <h3 className="mt-2.5 text-sm font-semibold">
+                    {point.title}
+                  </h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {point.body}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <Button className="mt-7 gap-2" onClick={() => navigate(plannerHref)}>
+              Open the marketing planner
+              <ArrowRight className="size-4" />
+            </Button>
+          </motion.div>
+
+          <motion.div
+            {...fadeUp}
+            transition={{ duration: 0.55, delay: 0.12, ease }}
+            className="relative"
+          >
+            <motion.div
+              animate={{ y: [0, -7, 0] }}
+              transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut" }}
+              className="absolute -right-2 -top-5 z-10 hidden rounded-xl border border-border/80 bg-card px-3 py-2 text-xs font-medium shadow-lg sm:block"
+            >
+              <span className="text-primary">✓</span> 4 posts planned this week
+            </motion.div>
+
+            <div className="rounded-3xl border border-border/70 bg-card p-5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.18)]">
+              {/* window bar */}
+              <div className="mb-3 flex items-center gap-1.5 px-1">
+                <span className="size-2.5 rounded-full bg-destructive/40" />
+                <span className="size-2.5 rounded-full bg-ai/50" />
+                <span className="size-2.5 rounded-full bg-primary/40" />
+                <span className="ml-3 truncate text-[11px] text-muted-foreground">
+                  OCIVO · Marketing Planner
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between px-1">
+                <p className="font-display text-lg tracking-tight md:text-xl">
+                  October 2026
+                </p>
+                <span className="rounded-full border border-primary/25 bg-primary/8 px-2.5 py-0.5 text-[10px] font-medium text-primary">
+                  4 scheduled
+                </span>
+              </div>
+
+              {/* weekday header */}
+              <div className="mt-4 grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-muted-foreground">
+                {["M", "T", "W", "T", "F", "S", "S"].map((d, i) => (
+                  <span key={`${d}-${i}`}>{d}</span>
+                ))}
+              </div>
+
+              {/* October 2026 starts on a Thursday → 3 leading blanks */}
+              <div className="mt-1.5 grid grid-cols-7 gap-1">
+                {Array.from({ length: 35 }, (_, i) => {
+                  const day = i - 2;
+                  if (day < 1 || day > 31) {
+                    return <span key={i} />;
+                  }
+                  const scheduled =
+                    day === 7 || day === 14 || day === 15 || day === 21;
+                  const draft = day === 16 || day === 22;
+                  return (
+                    <span
+                      key={i}
+                      className={`flex aspect-square flex-col items-center justify-center rounded-lg border text-[11px] ${
+                        scheduled
+                          ? "border-primary/30 bg-primary/8 font-semibold text-primary"
+                          : draft
+                            ? "border-ai/30 bg-[color-mix(in_oklab,var(--ai)_10%,transparent)] font-semibold text-ai-deep"
+                            : "border-transparent text-muted-foreground"
+                      }`}
+                    >
+                      <span>{day}</span>
+                      {(scheduled || draft) && (
+                        <span
+                          className={`mt-0.5 size-1.5 rounded-full ${
+                            scheduled ? "bg-primary" : "bg-ai-deep"
+                          }`}
+                        />
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+
+              {/* content queue */}
+              <div className="mt-4 space-y-2 border-t border-border/60 pt-3">
+                {[
+                  {
+                    title: "Spring launch teaser",
+                    meta: "Instagram · Spring launch",
+                    status: "Planned",
+                    tone: "bg-primary/10 text-primary",
+                  },
+                  {
+                    title: "Founder story",
+                    meta: "LinkedIn · Spring launch",
+                    status: "Draft",
+                    tone: "bg-[color-mix(in_oklab,var(--ai)_14%,transparent)] text-ai-deep",
+                  },
+                  {
+                    title: "5 mistakes new stores make",
+                    meta: "TikTok · content idea",
+                    status: "Idea",
+                    tone: "bg-muted text-muted-foreground",
+                  },
+                ].map((row) => (
+                  <div
+                    key={row.title}
+                    className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/60 px-3 py-2"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-medium">
+                        {row.title}
+                      </span>
+                      <span className="block truncate text-[10px] text-muted-foreground">
+                        {row.meta}
+                      </span>
+                    </span>
+                    <span
+                      className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${row.tone}`}
+                    >
+                      {row.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
         </div>
       </section>
 
