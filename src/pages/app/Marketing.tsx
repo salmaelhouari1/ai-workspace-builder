@@ -483,7 +483,12 @@ export default function Marketing() {
       creativeBrief: e.creativeBrief ?? "",
       status: e.status,
       scheduledAt: toLocalInput(e.scheduledAt),
-      campaignId: e.campaignId ?? "",
+      // Drop ids that no longer resolve (e.g. a campaign deleted before the
+      // unlink-on-delete fix) so the editor can't submit a dangling reference.
+      campaignId:
+        e.campaignId && campaigns?.some((c) => c._id === e.campaignId)
+          ? e.campaignId
+          : "",
       pillar: e.pillar ?? "",
       tags: (e.tags ?? []).join(", "),
       audience: e.audience ?? "",
@@ -707,8 +712,12 @@ export default function Marketing() {
       endDate: toLocalInput(c.endDate).slice(0, 10),
       status: c.status,
       notes: c.notes ?? "",
-      goalId: c.goalId ?? "",
-      projectId: c.projectId ?? "",
+      goalId:
+        c.goalId && goals?.some((g) => g._id === c.goalId) ? c.goalId : "",
+      projectId:
+        c.projectId && projects?.some((p) => p._id === c.projectId)
+          ? c.projectId
+          : "",
     });
     setCampaignOpen(true);
   };
@@ -1773,6 +1782,24 @@ export default function Marketing() {
           </div>
 
           <DialogFooter>
+            {entryDraft.id && (
+              <Button
+                variant="ghost"
+                className="gap-1.5 text-destructive hover:text-destructive sm:mr-auto"
+                onClick={() => {
+                  if (!entryDraft.id) return;
+                  setDeleteTarget({
+                    kind: "entry",
+                    id: entryDraft.id,
+                    label: entryDraft.title || "this content",
+                  });
+                  setEntryOpen(false);
+                }}
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => setEntryOpen(false)}

@@ -184,6 +184,16 @@ export const remove = mutation({
     const goal = await ctx.db.get(args.goalId);
     if (!goal) throw new Error("Goal not found");
     await assertMember(ctx, goal.workspaceId);
+    // Unlink campaigns so no campaign keeps a dangling goal reference.
+    const linkedCampaigns = await ctx.db
+      .query("campaigns")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", goal.workspaceId))
+      .collect();
+    for (const c of linkedCampaigns) {
+      if (c.goalId === args.goalId) {
+        await ctx.db.patch(c._id, { goalId: undefined });
+      }
+    }
     await ctx.db.delete(args.goalId);
     return { ok: true };
   },

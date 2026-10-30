@@ -258,6 +258,16 @@ export const remove = mutation({
     for (const t of tasks) {
       await ctx.db.patch(t._id, { projectId: undefined });
     }
+    // Unlink campaigns so no campaign keeps a dangling project reference.
+    const linkedCampaigns = await ctx.db
+      .query("campaigns")
+      .withIndex("by_workspace", (q) => q.eq("workspaceId", project.workspaceId))
+      .collect();
+    for (const c of linkedCampaigns) {
+      if (c.projectId === args.projectId) {
+        await ctx.db.patch(c._id, { projectId: undefined });
+      }
+    }
     await ctx.db.delete(args.projectId);
     return { ok: true };
   },

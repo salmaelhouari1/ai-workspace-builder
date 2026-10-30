@@ -304,6 +304,7 @@ const schema = defineSchema(
       convertedTo: v.optional(v.id("marketingEntries")),
     })
       .index("by_workspace", ["workspaceId"])
+      .index("by_campaign", ["campaignId"])
       .index("by_workspace_status", ["workspaceId", "convertedTo"]),
 
     campaigns: defineTable({

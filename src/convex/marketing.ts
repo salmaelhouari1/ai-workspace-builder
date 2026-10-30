@@ -28,13 +28,17 @@ const SUPPORTED_PLATFORMS = [
   "other",
 ] as const;
 
-function normalizePlatform(raw: string): string {
+/**
+ * Normalize and validate a platform value: trimmed, lower-cased, and it must
+ * be one of the supported planning platforms. Create and update share this so
+ * both reject the same inputs instead of one coercing to "other".
+ */
+function requirePlatform(raw: string): string {
   const k = raw.trim().toLowerCase();
-  if (k === "instagram" || k === "tiktok" || k === "linkedin" ||
-      k === "facebook" || k === "pinterest" || k === "other") {
-    return k;
+  if (!SUPPORTED_PLATFORMS.includes(k as typeof SUPPORTED_PLATFORMS[number])) {
+    throw new Error("Unsupported platform");
   }
-  return "other";
+  return k;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,21 +49,25 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     const { workspaceId } = await requireWorkspace(ctx);
-    const entries = await ctx.db
-      .query("marketingEntries")
-      .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-      .collect();
+    const [entries, campaigns] = await Promise.all([
+      ctx.db
+        .query("marketingEntries")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .collect(),
+      ctx.db
+        .query("campaigns")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .collect(),
+    ]);
+    const campaignById = new Map(campaigns.map((c) => [c._id, c]));
     entries.sort((a, b) => (b.scheduledAt ?? 0) - (a.scheduledAt ?? 0));
-    return await Promise.all(
-      entries.map(async (e) => {
-        const campaign = e.campaignId ? await ctx.db.get(e.campaignId) : null;
-        return {
-          ...e,
-          scheduledAt: e.scheduledAt ?? null,
-          campaignName: campaign?.name ?? null,
-        };
-      }),
-    );
+    return entries.map((e) => ({
+      ...e,
+      scheduledAt: e.scheduledAt ?? null,
+      campaignName: e.campaignId
+        ? campaignById.get(e.campaignId)?.name ?? null
+        : null,
+    }));
   },
 });
 
@@ -126,14 +134,11 @@ const createEntry = mutation({
     pillar: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     audience: v.optional(v.string()),
-    workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { userId, workspaceId } = await requireWorkspace(ctx);
     if (args.title.trim().length === 0) throw new Error("Title is required");
-    if (!SUPPORTED_PLATFORMS.includes(args.platform as typeof SUPPORTED_PLATFORMS[number])) {
-      throw new Error("Unsupported platform");
-    }
+    const platform = requirePlatform(args.platform);
     if (args.campaignId) {
       const campaign = await ctx.db.get(args.campaignId);
       if (!campaign || campaign.workspaceId !== workspaceId) {
@@ -142,7 +147,6 @@ const createEntry = mutation({
     }
     const now = Date.now();
     const title = args.title.trim().slice(0, MAX_TITLE);
-    const platform = normalizePlatform(args.platform);
     // Double-submit guard: reject an identical record created moments ago.
     const recentEntries = await ctx.db
       .query("marketingEntries")
@@ -163,7 +167,7 @@ const createEntry = mutation({
       workspaceId,
       title: args.title.trim().slice(0, MAX_TITLE),
       contentType: args.contentType.trim().slice(0, MAX_PLATFORM),
-      platform: normalizePlatform(args.platform),
+      platform,
       body: args.body,
       hook: args.hook?.trim().slice(0, MAX_TITLE),
       callToAction: args.callToAction?.trim().slice(0, MAX_TITLE),
@@ -209,7 +213,6 @@ const updateEntry = mutation({
     pillar: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     audience: v.optional(v.string()),
-    workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const entry = await ctx.db.get(args.entryId);
@@ -222,14 +225,27 @@ const updateEntry = mutation({
         throw new Error("Unknown campaign");
       }
     }
-    if (args.campaignId && args.campaignId !== entry.campaignId) {
-      const campaignId = args.campaignId;
+    if (args.title !== undefined && args.title.trim().length === 0) {
+      throw new Error("Title is required");
+    }
+    const nextTitle = (args.title ?? entry.title).trim().slice(0, MAX_TITLE);
+    const nextCampaignId =
+      args.campaignId === undefined
+        ? entry.campaignId
+        : args.campaignId ?? undefined;
+    // Duplicate guard — evaluated against the proposed title and target
+    // campaign, and only when either of them actually changes.
+    if (
+      (nextTitle !== entry.title || nextCampaignId !== entry.campaignId) &&
+      nextCampaignId
+    ) {
+      const campaignId = nextCampaignId;
       const siblings = await ctx.db
         .query("marketingEntries")
         .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
         .collect();
       const existing = siblings.find(
-        (e) => e._id !== args.entryId && e.title === entry.title,
+        (e) => e._id !== args.entryId && e.title === nextTitle,
       );
       if (existing) throw new Error("A content entry with this title already exists under the campaign");
     }
@@ -237,7 +253,7 @@ const updateEntry = mutation({
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.title !== undefined) patch.title = args.title.trim().slice(0, MAX_TITLE);
     if (args.contentType !== undefined) patch.contentType = args.contentType.trim().slice(0, MAX_PLATFORM);
-    if (args.platform !== undefined) patch.platform = normalizePlatform(args.platform);
+    if (args.platform !== undefined) patch.platform = requirePlatform(args.platform);
     if (args.body !== undefined) patch.body = args.body;
     if (args.hook !== undefined) patch.hook = args.hook.trim().slice(0, MAX_TITLE);
     if (args.callToAction !== undefined) patch.callToAction = args.callToAction.trim().slice(0, MAX_TITLE);
@@ -247,7 +263,6 @@ const updateEntry = mutation({
     if (args.pillar !== undefined) patch.pillar = args.pillar.trim().slice(0, 80);
     if (args.tags !== undefined) patch.tags = args.tags;
     if (args.audience !== undefined) patch.audience = args.audience.trim().slice(0, 160);
-    if (args.workspaceMemberId !== undefined) patch.workspaceMemberId = args.workspaceMemberId;
     if (args.campaignId !== undefined) patch.campaignId = args.campaignId ?? undefined;
 
     await ctx.db.patch(args.entryId, patch);
@@ -309,14 +324,11 @@ export const createIdea = mutation({
     pillar: v.optional(v.string()),
     campaignId: v.optional(v.id("campaigns")),
     tags: v.optional(v.array(v.string())),
-    workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { userId, workspaceId } = await requireWorkspace(ctx);
     if (args.title.trim().length === 0) throw new Error("Idea title is required");
-    if (!SUPPORTED_PLATFORMS.includes(args.platform as typeof SUPPORTED_PLATFORMS[number])) {
-      throw new Error("Unsupported platform");
-    }
+    const platform = requirePlatform(args.platform);
     if (args.campaignId) {
       const campaign = await ctx.db.get(args.campaignId);
       if (!campaign || campaign.workspaceId !== workspaceId) {
@@ -325,7 +337,6 @@ export const createIdea = mutation({
     }
     const now = Date.now();
     const title = args.title.trim().slice(0, MAX_TITLE);
-    const platform = normalizePlatform(args.platform);
     // Double-submit guard: reject an identical idea created moments ago.
     const recentIdeas = await ctx.db
       .query("marketingIdeas")
@@ -347,7 +358,7 @@ export const createIdea = mutation({
       title: args.title.trim().slice(0, MAX_TITLE),
       description: args.description?.trim().slice(0, 2000),
       contentType: args.contentType.trim().slice(0, MAX_PLATFORM),
-      platform: normalizePlatform(args.platform),
+      platform,
       pillar: args.pillar?.trim().slice(0, 80),
       campaignId: args.campaignId,
       tags: args.tags ?? [],
@@ -370,7 +381,6 @@ export const updateIdea = mutation({
     // null explicitly unlinks the campaign; omit to leave it unchanged.
     campaignId: v.optional(v.union(v.id("campaigns"), v.null())),
     tags: v.optional(v.array(v.string())),
-    workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const idea = await ctx.db.get(args.ideaId);
@@ -383,13 +393,19 @@ export const updateIdea = mutation({
         throw new Error("Unknown campaign");
       }
     }
-    if (args.campaignId && args.campaignId !== idea.campaignId) {
+    if (args.title !== undefined && args.title.trim().length === 0) {
+      throw new Error("Idea title is required");
+    }
+    // Duplicate guard — evaluated against the proposed title, and only when
+    // the title actually changes.
+    const nextTitle = (args.title ?? idea.title).trim().slice(0, MAX_TITLE);
+    if (nextTitle !== idea.title) {
       const siblings = await ctx.db
         .query("marketingIdeas")
         .withIndex("by_workspace", (q) => q.eq("workspaceId", idea.workspaceId))
         .collect();
       const existing = siblings.find(
-        (i) => i._id !== args.ideaId && i.title === idea.title,
+        (i) => i._id !== args.ideaId && i.title === nextTitle,
       );
       if (existing) throw new Error("An idea with this title already exists");
     }
@@ -398,11 +414,10 @@ export const updateIdea = mutation({
     if (args.title !== undefined) patch.title = args.title.trim().slice(0, MAX_TITLE);
     if (args.description !== undefined) patch.description = args.description.trim().slice(0, 2000);
     if (args.contentType !== undefined) patch.contentType = args.contentType.trim().slice(0, MAX_PLATFORM);
-    if (args.platform !== undefined) patch.platform = normalizePlatform(args.platform);
+    if (args.platform !== undefined) patch.platform = requirePlatform(args.platform);
     if (args.pillar !== undefined) patch.pillar = args.pillar.trim().slice(0, 80);
     if (args.campaignId !== undefined) patch.campaignId = args.campaignId ?? undefined;
     if (args.tags !== undefined) patch.tags = args.tags;
-    if (args.workspaceMemberId !== undefined) patch.workspaceMemberId = args.workspaceMemberId;
 
     await ctx.db.patch(args.ideaId, patch);
     return { ok: true };
@@ -517,15 +532,10 @@ export const getCampaign = query({
       .query("marketingEntries")
       .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
       .collect();
-    const campaignId = args.campaignId;
-    const ideas = (
-      await ctx.db
-        .query("marketingIdeas")
-        .withIndex("by_workspace", (q) =>
-          q.eq("workspaceId", campaign.workspaceId),
-        )
-        .collect()
-    ).filter((i) => i.campaignId === campaignId);
+    const ideas = await ctx.db
+      .query("marketingIdeas")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+      .collect();
 
     const entryCount = new Map<string, number>();
     for (const e of entries) {
@@ -563,11 +573,13 @@ export const createCampaign = mutation({
     notes: v.optional(v.string()),
     goalId: v.optional(v.id("goals")),
     projectId: v.optional(v.id("projects")),
-    workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { userId, workspaceId } = await requireWorkspace(ctx);
     if (args.name.trim().length === 0) throw new Error("Campaign name is required");
+    if (args.startDate && args.endDate && args.endDate < args.startDate) {
+      throw new Error("The end date can't be before the start date");
+    }
     if (args.goalId) {
       const goal = await ctx.db.get(args.goalId);
       if (!goal || goal.workspaceId !== workspaceId) throw new Error("Unknown goal");
@@ -630,7 +642,6 @@ export const updateCampaign = mutation({
     // null unlinks; omit to leave it unchanged.
     goalId: v.optional(v.union(v.id("goals"), v.null())),
     projectId: v.optional(v.union(v.id("projects"), v.null())),
-    workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const campaign = await ctx.db.get(args.campaignId);
@@ -645,6 +656,17 @@ export const updateCampaign = mutation({
       const project = await ctx.db.get(args.projectId);
       if (!project || project.workspaceId !== campaign.workspaceId) throw new Error("Unknown project");
     }
+    if (args.name !== undefined && args.name.trim().length === 0) {
+      throw new Error("Campaign name is required");
+    }
+    // Validate the effective date range (after applying any clears).
+    const nextStart =
+      args.startDate !== undefined ? args.startDate ?? undefined : campaign.startDate;
+    const nextEnd =
+      args.endDate !== undefined ? args.endDate ?? undefined : campaign.endDate;
+    if (nextStart !== undefined && nextEnd !== undefined && nextEnd < nextStart) {
+      throw new Error("The end date can't be before the start date");
+    }
 
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.name !== undefined) patch.name = args.name.trim().slice(0, MAX_TITLE);
@@ -656,7 +678,6 @@ export const updateCampaign = mutation({
     if (args.notes !== undefined) patch.notes = args.notes.trim().slice(0, 2000);
     if (args.goalId !== undefined) patch.goalId = args.goalId ?? undefined;
     if (args.projectId !== undefined) patch.projectId = args.projectId ?? undefined;
-    if (args.workspaceMemberId !== undefined) patch.workspaceMemberId = args.workspaceMemberId;
 
     await ctx.db.patch(args.campaignId, patch);
     return { ok: true };
@@ -669,6 +690,23 @@ export const removeCampaign = mutation({
     const campaign = await ctx.db.get(args.campaignId);
     if (!campaign) throw new Error("Campaign not found");
     await assertMember(ctx, campaign.workspaceId);
+    // Unlink content and ideas first so no record keeps a dangling reference.
+    const [entries, ideas] = await Promise.all([
+      ctx.db
+        .query("marketingEntries")
+        .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+        .collect(),
+      ctx.db
+        .query("marketingIdeas")
+        .withIndex("by_campaign", (q) => q.eq("campaignId", args.campaignId))
+        .collect(),
+    ]);
+    for (const e of entries) {
+      await ctx.db.patch(e._id, { campaignId: undefined });
+    }
+    for (const i of ideas) {
+      await ctx.db.patch(i._id, { campaignId: undefined });
+    }
     await ctx.db.delete(args.campaignId);
     return { ok: true };
   },
@@ -707,7 +745,6 @@ export const createSuggestion = mutation({
   args: {
     suggestionName: v.string(),
     content: v.string(),
-    workspaceMemberId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { userId, workspaceId } = await requireWorkspace(ctx);
