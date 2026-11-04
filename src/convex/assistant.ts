@@ -23,6 +23,7 @@ import {
 } from "../lib/ai-fallback";
 import { parseInboxLocal, type InboxEntry } from "../lib/inbox";
 import { scoreText } from "../lib/nlp";
+import { isMarketingPlatform, type MarketingPlatform } from "../lib/marketing";
 
 const MODEL = "gpt-4o-mini";
 
@@ -119,6 +120,48 @@ function buildSnapshot(
     }
   }
 
+  if (context.marketing.campaigns.length) {
+    lines.push("CAMPAIGNS (marketing planner):");
+    for (const c of context.marketing.campaigns.slice(0, 12)) {
+      const when =
+        c.startDate || c.endDate
+          ? ` | ${isoDay(c.startDate) ?? "?"} → ${isoDay(c.endDate) ?? "?"}`
+          : " | no dates";
+      lines.push(
+        `- [campaign:${c.id}] ${c.name} | ${c.status}${c.objective ? ` | objective: ${c.objective}` : ""}${when} | ${c.entries} content item(s), ${c.published} published | route /app/marketing`,
+      );
+    }
+  }
+
+  const scheduled = context.marketing.entries.filter(
+    (e) => e.scheduledAt !== null,
+  );
+  const unscheduled = context.marketing.entries.filter(
+    (e) => e.scheduledAt === null && e.status !== "published",
+  );
+  if (scheduled.length || unscheduled.length) {
+    lines.push("MARKETING QUEUE (marketing planner):");
+    for (const e of [...scheduled.slice(0, 20), ...unscheduled.slice(0, 8)]) {
+      const when =
+        e.scheduledAt !== null
+          ? new Date(e.scheduledAt).toISOString().slice(0, 16).replace("T", " ") +
+            " (UTC)"
+          : "unscheduled";
+      lines.push(
+        `- [entry:${e.id}] "${e.title}" | ${e.platform} · ${e.contentType} | ${e.status} | ${when}${e.campaignName ? ` | campaign ${e.campaignName}` : ""} | route /app/marketing`,
+      );
+    }
+  }
+
+  if (context.marketing.ideas.length) {
+    lines.push("CONTENT IDEAS (not yet drafted):");
+    for (const i of context.marketing.ideas.slice(0, 12)) {
+      lines.push(
+        `- [idea:${i.id}] ${i.title} | ${i.platform} · ${i.contentType}${i.campaignName ? ` | campaign ${i.campaignName}` : ""} | route /app/marketing`,
+      );
+    }
+  }
+
   if (context.pendingInbox) {
     lines.push(
       `INBOX: ${context.pendingInbox} unprocessed item(s) waiting for review.`,
@@ -126,6 +169,11 @@ function buildSnapshot(
   }
 
   return lines.join("\n");
+}
+
+/** Epoch ms → "YYYY-MM-DD" (UTC), matching the snapshot's `today`. */
+function isoDay(ts: number | null | undefined): string | undefined {
+  return ts ? new Date(ts).toISOString().slice(0, 10) : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +188,33 @@ export interface TaskSpec {
   priority?: "low" | "medium" | "high";
 }
 
+export interface MarketingEntrySpec {
+  title: string;
+  platform: MarketingPlatform;
+  contentType: string;
+  body?: string;
+  hook?: string;
+  callToAction?: string;
+  status: "idea" | "draft" | "planned" | "readyToPublish";
+  scheduledAt?: number;
+}
+
 export type Proposal =
+  | {
+      kind: "createMarketingEntries";
+      entries: MarketingEntrySpec[];
+      campaignId?: Id<"campaigns">;
+      campaignLabel?: string;
+    }
+  | {
+      kind: "createMarketingCampaign";
+      name: string;
+      objective?: string;
+      audience?: string;
+      startDate?: number;
+      endDate?: number;
+      entries: MarketingEntrySpec[];
+    }
   | {
       kind: "createTasks";
       tasks: TaskSpec[];
@@ -218,6 +292,72 @@ function taskSpecs(raw: unknown): TaskSpec[] {
           ? t.dueTime
           : undefined,
       priority: asPriority(t.priority),
+    });
+  }
+  return out;
+}
+
+/** "YYYY-MM-DD" + optional "HH:MM" → epoch ms (UTC, like `dayFromIso`). */
+function scheduleFromIso(date: unknown, time: unknown): number | undefined {
+  const day = dayFromIso(date);
+  if (day === undefined) return undefined;
+  const m =
+    typeof time === "string" ? /^(\d{1,2}):(\d{2})$/.exec(time.trim()) : null;
+  if (!m) return day;
+  const hours = Number(m[1]);
+  const minutes = Number(m[2]);
+  if (hours > 23 || minutes > 59) return day;
+  return day + hours * 3_600_000 + minutes * 60_000;
+}
+
+function marketingEntrySpecs(raw: unknown): MarketingEntrySpec[] {
+  if (!Array.isArray(raw)) return [];
+  const out: MarketingEntrySpec[] = [];
+  for (const item of raw.slice(0, 14)) {
+    const e = item as Record<string, unknown>;
+    if (typeof e?.title !== "string" || !e.title.trim()) continue;
+    const platform =
+      typeof e.platform === "string" ? e.platform.trim().toLowerCase() : "";
+    // Unknown channels are dropped, never coerced to "other" — otherwise the
+    // planner silently stores content under the wrong channel.
+    if (!isMarketingPlatform(platform)) continue;
+    const scheduledAt = scheduleFromIso(e.date ?? e.scheduled, e.time);
+    const status =
+      e.status === "idea" ||
+      e.status === "draft" ||
+      e.status === "planned" ||
+      e.status === "readyToPublish"
+        ? e.status
+        : scheduledAt !== undefined
+          ? "planned"
+          : "draft";
+    const contentType =
+      typeof e.contentType === "string" && e.contentType.trim()
+        ? e.contentType.trim().slice(0, 40)
+        : platform === "email"
+          ? "Newsletter"
+          : "Post";
+    out.push({
+      title: e.title.trim().slice(0, 240),
+      platform,
+      contentType,
+      body:
+        typeof e.body === "string" && e.body.trim()
+          ? e.body.slice(0, 8000)
+          : undefined,
+      hook:
+        typeof e.hook === "string" && e.hook.trim()
+          ? e.hook.trim().slice(0, 240)
+          : undefined,
+      callToAction:
+        typeof (e.cta ?? e.callToAction) === "string" &&
+        String(e.cta ?? e.callToAction).trim()
+          ? String(e.cta ?? e.callToAction)
+              .trim()
+              .slice(0, 240)
+          : undefined,
+      status,
+      scheduledAt,
     });
   }
   return out;
@@ -336,6 +476,50 @@ function convertProposal(raw: unknown, context: Context): Proposal | null {
               : undefined,
         };
       }
+      case "createMarketingEntries": {
+        const entries = marketingEntrySpecs(p.entries);
+        if (!entries.length) return null;
+        let campaignId: Id<"campaigns"> | undefined;
+        let campaignLabel: string | undefined;
+        if (typeof p.campaign === "string" && p.campaign.trim()) {
+          campaignLabel = p.campaign.trim();
+          const match = context.marketing.campaigns.find(
+            (c) => c.name.toLowerCase() === campaignLabel!.toLowerCase(),
+          );
+          if (match) campaignId = match.id as Id<"campaigns">;
+        }
+        return {
+          kind: "createMarketingEntries",
+          entries,
+          campaignId,
+          campaignLabel,
+        };
+      }
+      case "createMarketingCampaign": {
+        if (typeof p.name !== "string" || !p.name.trim()) return null;
+        const startDate = dayFromIso(p.start);
+        const end = dayFromIso(p.end);
+        // A backwards range is dropped rather than stored.
+        const endDate =
+          end !== undefined && startDate !== undefined && end < startDate
+            ? undefined
+            : end;
+        return {
+          kind: "createMarketingCampaign",
+          name: p.name.trim().slice(0, 160),
+          objective:
+            typeof p.objective === "string" && p.objective.trim()
+              ? p.objective.trim().slice(0, 200)
+              : undefined,
+          audience:
+            typeof p.audience === "string" && p.audience.trim()
+              ? p.audience.trim().slice(0, 200)
+              : undefined,
+          startDate,
+          endDate,
+          entries: marketingEntrySpecs(p.entries),
+        };
+      }
     }
   } catch {
     return null;
@@ -415,6 +599,26 @@ function toFallbackContext(context: Context): FallbackContext {
     })),
     pendingInbox: context.pendingInbox,
     documentTitles: context.documents.map((d) => d.title),
+    marketing: {
+      campaigns: context.marketing.campaigns.map((c) => ({
+        id: c.id,
+        name: c.name,
+        status: c.status,
+        startDate: c.startDate ?? undefined,
+        endDate: c.endDate ?? undefined,
+        entries: c.entries,
+      })),
+      entries: context.marketing.entries.map((e) => ({
+        id: e.id,
+        title: e.title,
+        platform: e.platform,
+        contentType: e.contentType,
+        status: e.status,
+        scheduledAt: e.scheduledAt ?? undefined,
+        campaignName: e.campaignName ?? undefined,
+      })),
+      ideas: context.marketing.ideas.length,
+    },
   };
 }
 
@@ -429,6 +633,12 @@ How to behave:
 - Never propose deleting data, and never propose changes you weren't asked for.
 - Dates in proposals use "YYYY-MM-DD" (today is in the snapshot). If a task's due date should be cleared, use "due": null.
 
+MARKETING PLANNER (planning only — nothing is ever published or emailed):
+- It stores campaigns, content items and content ideas. Channels: instagram, tiktok, linkedin, facebook, pinterest, email, other. An "email" item is a planned email/newsletter.
+- To plan content, return "createMarketingEntries" — attach it to an existing campaign with the exact campaign name, or omit the campaign for standalone content. Use "createMarketingCampaign" when the user asks for a new campaign; nest its content items inside it.
+- Give every item a channel, a content type (post, reel, story, newsletter, email…) and a date/time when the user asked for a schedule. Use status "planned" when you set a date, otherwise "draft".
+- Never claim content was published or an email was sent, and never invent reach, clicks or open rates.
+
 Return STRICT JSON only — no prose outside it:
 {
   "answer": "your reply (markdown allowed)",
@@ -442,7 +652,9 @@ PROPOSAL variants (exactly one):
 - {"type":"updateTask","taskId":"...","title":"...","due":"YYYY-MM-DD"|null,"status":"todo|in_progress|done","note":"one-line summary of the change"}
 - {"type":"updateProject","projectId":"...","deadline":"YYYY-MM-DD"|null,"status":"planned|active|paused|done","note":"one-line summary"}
 - {"type":"createGoal","title":"...","target":10000,"current":0,"unit":"€","deadline":"YYYY-MM-DD"}
-- {"type":"createDocument","title":"...","content":"# markdown ...","category":"Notes"}`;
+- {"type":"createDocument","title":"...","content":"# markdown ...","category":"Notes"}
+- {"type":"createMarketingEntries","campaign":"<exact campaign name or omit>","entries":[{"title":"...","platform":"instagram|tiktok|linkedin|facebook|pinterest|email|other","contentType":"post|reel|story|newsletter|email","date":"YYYY-MM-DD","time":"HH:MM","status":"idea|draft|planned|readyToPublish","hook":"...","body":"...","cta":"..."}]}
+- {"type":"createMarketingCampaign","name":"...","objective":"...","audience":"...","start":"YYYY-MM-DD","end":"YYYY-MM-DD","entries":[...]}`;
 
 // ---------------------------------------------------------------------------
 // Actions

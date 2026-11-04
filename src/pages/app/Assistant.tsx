@@ -16,6 +16,7 @@ const SUGGESTIONS = [
   "Summarize my current projects.",
   "What are my priorities this week?",
   "Create a launch plan for my product.",
+  "Plan next week's content — 3 posts and an email newsletter.",
   "Turn these notes into tasks: call the supplier, draft next week's content, follow up with Ana.",
 ];
 
@@ -132,8 +133,8 @@ export default function Assistant() {
                 Ask anything about your work
               </h2>
               <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
-                OCIVO answers from your actual tasks, projects and goals — and
-                prepares changes for you to confirm.
+                OCIVO answers from your actual tasks, projects, goals and
+                content plan — and prepares changes for you to confirm.
               </p>
               <div className="mt-6 flex w-full max-w-lg flex-col gap-2">
                 {SUGGESTIONS.map((s) => (

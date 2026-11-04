@@ -419,3 +419,215 @@ describe("list campaign join", () => {
     expect(rows.find((r) => r.title === "Standalone")?.campaignName).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Email is a first-class planner channel.
+// ---------------------------------------------------------------------------
+
+describe("email channel", () => {
+  test("create and update accept email and normalize it", async () => {
+    const { t, user } = await seeded();
+    const entryId = await user.mutation(
+      api.marketing.create,
+      entryArgs({ platform: " Email " }),
+    );
+    const created = await t.run((ctx) => ctx.db.get(entryId));
+    expect(created?.platform).toBe("email");
+
+    await user.mutation(api.marketing.update, { entryId, platform: "EMAIL" });
+    const updated = await t.run((ctx) => ctx.db.get(entryId));
+    expect(updated?.platform).toBe("email");
+  });
+
+  test("ideas accept email too", async () => {
+    const { t, user } = await seeded();
+    const ideaId = await user.mutation(api.marketing.createIdea, {
+      title: "Welcome sequence",
+      contentType: "Newsletter",
+      platform: "email",
+    });
+    const doc = await t.run((ctx) => ctx.db.get(ideaId));
+    expect(doc?.platform).toBe("email");
+  });
+
+  test("email is not coerced away by an unrelated update", async () => {
+    const { t, user } = await seeded();
+    const entryId = await user.mutation(
+      api.marketing.create,
+      entryArgs({ platform: "email", contentType: "Newsletter" }),
+    );
+    await user.mutation(api.marketing.update, {
+      entryId,
+      body: "New copy for the send.",
+    });
+    const doc = await t.run((ctx) => ctx.db.get(entryId));
+    expect(doc?.platform).toBe("email");
+    expect(doc?.contentType).toBe("Newsletter");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Assistant proposals write to the planner only after confirmation.
+// ---------------------------------------------------------------------------
+
+describe("marketing proposals", () => {
+  test("createMarketingEntries adds content under an existing campaign", async () => {
+    const { t, user, userId } = await seeded();
+    const campaignId = await user.mutation(api.marketing.createCampaign, {
+      name: "Newsletter relaunch",
+      status: "active",
+    });
+
+    const result = await user.mutation(api.proposals.apply, {
+      proposal: {
+        kind: "createMarketingEntries",
+        campaignId,
+        campaignLabel: "Newsletter relaunch",
+        entries: [
+          {
+            title: "Welcome email",
+            platform: "email",
+            contentType: "Newsletter",
+            status: "planned",
+            scheduledAt: 1_700_000_000_000,
+          },
+          {
+            title: "Teaser post",
+            platform: "instagram",
+            contentType: "Post",
+            status: "draft",
+          },
+        ],
+      },
+    });
+
+    expect(result.summary).toContain("2 content items");
+    expect(result.route).toBe("/app/marketing");
+
+    const rows = await t.run((ctx) =>
+      ctx.db.query("marketingEntries").collect(),
+    );
+    expect(rows).toHaveLength(2);
+    const email = rows.find((r) => r.platform === "email");
+    expect(email?.campaignId).toBe(campaignId);
+    expect(email?.scheduledAt).toBe(1_700_000_000_000);
+    // The owner comes from the session, not from the proposal.
+    expect(email?.workspaceMemberId).toBe(userId);
+  });
+
+  test("createMarketingEntries rejects an unsupported channel", async () => {
+    const { user } = await seeded();
+    await expect(
+      user.mutation(api.proposals.apply, {
+        proposal: {
+          kind: "createMarketingEntries",
+          entries: [
+            {
+              title: "Cross-post",
+              platform: "twitter",
+              contentType: "Post",
+              status: "draft",
+            },
+          ],
+        },
+      }),
+    ).rejects.toThrow("Unsupported platform");
+  });
+
+  test("a campaign from another workspace cannot be targeted", async () => {
+    const { t, user } = await seeded();
+    const otherWorkspace = await t.run(async (ctx) => {
+      const stranger = await ctx.db.insert("users", {
+        name: "Elsewhere",
+        email: "elsewhere@example.com",
+      });
+      return await ctx.db.insert("campaigns", {
+        workspaceId: await ctx.db.insert("workspaces", {
+          name: "Other",
+          businessType: "general",
+          ownerId: stranger,
+          modules: [],
+          onboardedAt: Date.now(),
+          createdAt: Date.now(),
+        }),
+        name: "Not yours",
+        status: "active" as const,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    await expect(
+      user.mutation(api.proposals.apply, {
+        proposal: {
+          kind: "createMarketingEntries",
+          campaignId: otherWorkspace,
+          entries: [
+            {
+              title: "Sneaky",
+              platform: "email",
+              contentType: "Newsletter",
+              status: "draft",
+            },
+          ],
+        },
+      }),
+    ).rejects.toThrow("Campaign not found in this workspace");
+  });
+
+  test("createMarketingCampaign stores the campaign and its items", async () => {
+    const { t, user } = await seeded();
+    const result = await user.mutation(api.proposals.apply, {
+      proposal: {
+        kind: "createMarketingCampaign",
+        name: "Black Friday",
+        objective: "Sales",
+        startDate: 1_700_000_000_000,
+        endDate: 1_700_500_000_000,
+        entries: [
+          {
+            title: "Early access email",
+            platform: "email",
+            contentType: "Newsletter",
+            status: "planned",
+          },
+          {
+            title: "Countdown reel",
+            platform: "tiktok",
+            contentType: "Reel",
+            status: "draft",
+          },
+        ],
+      },
+    });
+
+    expect(result.summary).toBe(
+      'Created campaign "Black Friday" with 2 content items.',
+    );
+
+    const campaigns = await t.run((ctx) =>
+      ctx.db.query("campaigns").collect(),
+    );
+    expect(campaigns).toHaveLength(1);
+    const entries = await t.run((ctx) =>
+      ctx.db.query("marketingEntries").collect(),
+    );
+    expect(entries).toHaveLength(2);
+    expect(entries.every((e) => e.campaignId === campaigns[0]._id)).toBe(true);
+  });
+
+  test("createMarketingCampaign rejects a backwards date range", async () => {
+    const { user } = await seeded();
+    await expect(
+      user.mutation(api.proposals.apply, {
+        proposal: {
+          kind: "createMarketingCampaign",
+          name: "Backwards",
+          startDate: 20_000,
+          endDate: 10_000,
+          entries: [],
+        },
+      }),
+    ).rejects.toThrow("The end date can't be before the start date");
+  });
+});

@@ -22,7 +22,7 @@ export const workspaceContext = query({
     if (!session) return null;
     const { workspaceId } = session;
 
-    const [workspace, allTasks, projects, goals, docs, inbox] =
+    const [workspace, allTasks, projects, goals, docs, inbox, campaigns, entries, ideas] =
       await Promise.all([
         ctx.db.get(workspaceId),
         ctx.db
@@ -47,6 +47,20 @@ export const workspaceContext = query({
             q.eq("workspaceId", workspaceId).eq("status", "pending"),
           )
           .collect(),
+        // Marketing planner, bounded: the assistant only needs enough to
+        // name campaigns, spot open drafts and avoid collisions.
+        ctx.db
+          .query("campaigns")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+          .take(40),
+        ctx.db
+          .query("marketingEntries")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+          .take(150),
+        ctx.db
+          .query("marketingIdeas")
+          .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+          .take(60),
       ]);
 
     const now = Date.now();
@@ -161,7 +175,62 @@ export const workspaceContext = query({
           : undefined,
     }));
 
+    // Marketing: bodies stay in the database (they can be long markdown) —
+    // the snapshot only carries what answers and proposals need.
+    const campaignName = new Map(campaigns.map((c) => [c._id, c.name]));
+    const entryItems = entries
+      .map((e) => ({
+        id: e._id as string,
+        title: e.title,
+        platform: e.platform,
+        contentType: e.contentType,
+        status: e.status,
+        scheduledAt: e.scheduledAt ?? null,
+        campaignName: e.campaignId
+          ? (campaignName.get(e.campaignId) ?? null)
+          : null,
+      }))
+      .sort((a, b) => {
+        if (a.scheduledAt !== null && b.scheduledAt !== null)
+          return a.scheduledAt - b.scheduledAt;
+        if (a.scheduledAt !== null) return -1;
+        if (b.scheduledAt !== null) return 1;
+        return 0;
+      });
+
+    const campaignItems = campaigns.map((c) => {
+      const own = entries.filter((e) => e.campaignId === c._id);
+      return {
+        id: c._id as string,
+        name: c.name,
+        status: c.status,
+        objective: c.objective ?? null,
+        audience: c.audience ?? null,
+        startDate: c.startDate ?? null,
+        endDate: c.endDate ?? null,
+        entries: own.length,
+        published: own.filter((e) => e.status === "published").length,
+      };
+    });
+
+    const ideaItems = ideas
+      .filter((i) => !i.convertedTo)
+      .map((i) => ({
+        id: i._id as string,
+        title: i.title,
+        platform: i.platform,
+        contentType: i.contentType,
+        campaignName: i.campaignId
+          ? (campaignName.get(i.campaignId) ?? null)
+          : null,
+      }));
+
     return {
+      marketing: {
+        campaigns: campaignItems,
+        entries: entryItems,
+        ideas: ideaItems,
+      },
       workspace: {
         id: workspaceId as string,
         name: workspace?.name ?? "Workspace",

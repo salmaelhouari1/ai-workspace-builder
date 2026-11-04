@@ -32,6 +32,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
+import {
+  MARKETING_PLATFORMS,
+  marketingPlatformLabel,
+} from "@/lib/marketing";
 import { cn } from "@/lib/utils";
 import {
   CalendarDays,
@@ -80,23 +84,7 @@ const STATUS_CLASS: Record<Status, string> = {
   published: "bg-primary/15 text-primary",
 };
 
-const PLATFORMS = [
-  "instagram",
-  "tiktok",
-  "linkedin",
-  "facebook",
-  "pinterest",
-  "other",
-] as const;
-
-const PLATFORM_LABEL: Record<string, string> = {
-  instagram: "Instagram",
-  tiktok: "TikTok",
-  linkedin: "LinkedIn",
-  facebook: "Facebook",
-  pinterest: "Pinterest",
-  other: "Other",
-};
+const PLATFORMS = MARKETING_PLATFORMS;
 
 const CAMPAIGN_STATUSES = [
   "active",
@@ -142,9 +130,7 @@ type Campaign = Doc<"campaigns"> & {
   entryIds: Id<"marketingEntries">[];
 };
 
-function platformLabel(p: string): string {
-  return PLATFORM_LABEL[p] ?? p.charAt(0).toUpperCase() + p.slice(1);
-}
+const platformLabel = marketingPlatformLabel;
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");

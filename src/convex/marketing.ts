@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { assertMember, requireWorkspace } from "./lib/auth";
+import { requireMarketingPlatform } from "../lib/marketing";
 
 /**
  * Marketing Planner — the planner layer of the workspace.
@@ -19,27 +20,11 @@ import { assertMember, requireWorkspace } from "./lib/auth";
 const MAX_TITLE = 240;
 const MAX_PLATFORM = 40;
 
-const SUPPORTED_PLATFORMS = [
-  "instagram",
-  "tiktok",
-  "linkedin",
-  "facebook",
-  "pinterest",
-  "other",
-] as const;
-
 /**
- * Normalize and validate a platform value: trimmed, lower-cased, and it must
- * be one of the supported planning platforms. Create and update share this so
+ * Channels live in ../lib/marketing so the planner UI and the assistant
+ * validate against exactly the same list. Creates and updates share this, so
  * both reject the same inputs instead of one coercing to "other".
  */
-function requirePlatform(raw: string): string {
-  const k = raw.trim().toLowerCase();
-  if (!SUPPORTED_PLATFORMS.includes(k as typeof SUPPORTED_PLATFORMS[number])) {
-    throw new Error("Unsupported platform");
-  }
-  return k;
-}
 
 // ---------------------------------------------------------------------------
 // marketingEntries
@@ -138,7 +123,7 @@ const createEntry = mutation({
   handler: async (ctx, args) => {
     const { userId, workspaceId } = await requireWorkspace(ctx);
     if (args.title.trim().length === 0) throw new Error("Title is required");
-    const platform = requirePlatform(args.platform);
+    const platform = requireMarketingPlatform(args.platform);
     if (args.campaignId) {
       const campaign = await ctx.db.get(args.campaignId);
       if (!campaign || campaign.workspaceId !== workspaceId) {
@@ -253,7 +238,8 @@ const updateEntry = mutation({
     const patch: Record<string, unknown> = { updatedAt: Date.now() };
     if (args.title !== undefined) patch.title = args.title.trim().slice(0, MAX_TITLE);
     if (args.contentType !== undefined) patch.contentType = args.contentType.trim().slice(0, MAX_PLATFORM);
-    if (args.platform !== undefined) patch.platform = requirePlatform(args.platform);
+    if (args.platform !== undefined)
+      patch.platform = requireMarketingPlatform(args.platform);
     if (args.body !== undefined) patch.body = args.body;
     if (args.hook !== undefined) patch.hook = args.hook.trim().slice(0, MAX_TITLE);
     if (args.callToAction !== undefined) patch.callToAction = args.callToAction.trim().slice(0, MAX_TITLE);
@@ -328,7 +314,7 @@ export const createIdea = mutation({
   handler: async (ctx, args) => {
     const { userId, workspaceId } = await requireWorkspace(ctx);
     if (args.title.trim().length === 0) throw new Error("Idea title is required");
-    const platform = requirePlatform(args.platform);
+    const platform = requireMarketingPlatform(args.platform);
     if (args.campaignId) {
       const campaign = await ctx.db.get(args.campaignId);
       if (!campaign || campaign.workspaceId !== workspaceId) {
@@ -414,7 +400,8 @@ export const updateIdea = mutation({
     if (args.title !== undefined) patch.title = args.title.trim().slice(0, MAX_TITLE);
     if (args.description !== undefined) patch.description = args.description.trim().slice(0, 2000);
     if (args.contentType !== undefined) patch.contentType = args.contentType.trim().slice(0, MAX_PLATFORM);
-    if (args.platform !== undefined) patch.platform = requirePlatform(args.platform);
+    if (args.platform !== undefined)
+      patch.platform = requireMarketingPlatform(args.platform);
     if (args.pillar !== undefined) patch.pillar = args.pillar.trim().slice(0, 80);
     if (args.campaignId !== undefined) patch.campaignId = args.campaignId ?? undefined;
     if (args.tags !== undefined) patch.tags = args.tags;

@@ -249,7 +249,7 @@ const schema = defineSchema(
       title: v.string(),
       // Content type: post, article, thread, script, ad, newsletter…
       contentType: v.string(),
-      platform: v.string(), // "instagram" | "tiktok" | "linkedin" | "facebook" | "pinterest" | "other"
+      platform: v.string(), // "instagram" | "tiktok" | "linkedin" | "facebook" | "pinterest" | "email" | "other"
       // Markdown caption / body.
       body: v.string(),
       hook: v.optional(v.string()),

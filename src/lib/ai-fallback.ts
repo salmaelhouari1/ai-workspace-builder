@@ -6,6 +6,7 @@
  * shapes the LLM path produces: prose + clickable references.
  */
 
+import { marketingPlatformLabel } from "./marketing";
 import { relativeDayPhrase, utcDayStart, DAY_MS } from "./nlp";
 
 export interface FallbackTask {
@@ -38,6 +39,29 @@ export interface FallbackGoal {
   deadline?: number;
 }
 
+export interface FallbackMarketingEntry {
+  id: string;
+  title: string;
+  platform: string;
+  contentType: string;
+  status: string;
+  scheduledAt?: number;
+  campaignName?: string;
+}
+
+export interface FallbackMarketing {
+  campaigns: Array<{
+    id: string;
+    name: string;
+    status: string;
+    startDate?: number;
+    endDate?: number;
+    entries: number;
+  }>;
+  entries: FallbackMarketingEntry[];
+  ideas: number;
+}
+
 export interface FallbackContext {
   workspaceName: string;
   businessType: string;
@@ -46,6 +70,7 @@ export interface FallbackContext {
   goals: FallbackGoal[];
   pendingInbox: number;
   documentTitles: string[];
+  marketing?: FallbackMarketing;
 }
 
 export interface AssistantReference {
@@ -207,7 +232,26 @@ export function fallbackAnswer(
     };
   }
 
-  if (/\bcontent\b|\bpost\b|\bcalendar\b/.test(q)) {
+  if (/\bcontent\b|\bpost\b|\bcalendar\b|\bemail\b|\bnewsletter\b|\bschedul|\bcampaign\b|\bmarketing\b/.test(q)) {
+    const planner = ctx.marketing;
+    const planned = (planner?.entries ?? []).filter((e) => e.status !== "published");
+    if (planned.length) {
+      refs.push({ label: "Marketing planner", kind: "workspace", route: "/app/marketing" });
+      const lines = planned.slice(0, 6).map((e) => {
+        const when = e.scheduledAt
+          ? relativeDayPhrase(e.scheduledAt).replace(/\.$/, "")
+          : "unscheduled";
+        return `- **${e.title}** — ${marketingPlatformLabel(e.platform)} · ${e.contentType} · ${when}${e.campaignName ? ` (${e.campaignName})` : ""}`;
+      });
+      const campaigns = planner?.campaigns.length
+        ? `\n\n${planner.campaigns.length} campaign${planner.campaigns.length === 1 ? "" : "s"} running · ${planner.ideas} idea${planner.ideas === 1 ? "" : "s"} waiting to be drafted.`
+        : "";
+      return {
+        answer: `Here's what's in your planner:\n\n${lines.join("\n")}${campaigns}`,
+        references: dedupe(refs),
+      };
+    }
+
     const contentTasks = open.filter((t) => (t.tags ?? []).includes("content") || /content|post|video|newsletter/i.test(t.title));
     if (!contentTasks.length) {
       return {

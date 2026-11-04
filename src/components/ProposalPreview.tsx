@@ -1,9 +1,18 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Proposal } from "@/convex/assistant";
+import { marketingPlatformLabel } from "@/lib/marketing";
 import { relativeDayLabel } from "@/lib/nlp";
 import { cn } from "@/lib/utils";
-import { CalendarDays, Check, FileText, ListChecks, Target, X } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  FileText,
+  ListChecks,
+  Megaphone,
+  Target,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 
 /**
@@ -33,6 +42,12 @@ export function ProposalPreview({
       ? proposal.tasks
       : [];
 
+  const marketingEntries =
+    proposal.kind === "createMarketingEntries" ||
+    proposal.kind === "createMarketingCampaign"
+      ? proposal.entries
+      : [];
+
   const title = (() => {
     switch (proposal.kind) {
       case "createTasks":
@@ -47,6 +62,12 @@ export function ProposalPreview({
         return `goal “${proposal.title}”`;
       case "createDocument":
         return `document “${proposal.title}”`;
+      case "createMarketingEntries":
+        return proposal.campaignLabel
+          ? `content for “${proposal.campaignLabel}”`
+          : "planner content";
+      case "createMarketingCampaign":
+        return `campaign “${proposal.name}”`;
     }
   })();
 
@@ -57,6 +78,9 @@ export function ProposalPreview({
       <Target className="size-4" />
     ) : proposal.kind === "createDocument" ? (
       <FileText className="size-4" />
+    ) : proposal.kind === "createMarketingEntries" ||
+      proposal.kind === "createMarketingCampaign" ? (
+      <Megaphone className="size-4" />
     ) : (
       <Check className="size-4" />
     );
@@ -89,27 +113,46 @@ export function ProposalPreview({
     if (proposal.status) details.push(`Status: ${proposal.status}`);
     if (proposal.note) details.push(proposal.note);
   }
+  if (proposal.kind === "createMarketingCampaign") {
+    if (proposal.startDate !== undefined) {
+      details.push(`Starts: ${relativeDayLabel(proposal.startDate, today)}`);
+    }
+    if (proposal.endDate !== undefined) {
+      details.push(`Ends: ${relativeDayLabel(proposal.endDate, today)}`);
+    }
+    if (proposal.objective) details.push(`Objective: ${proposal.objective}`);
+  }
 
   const confirm = () => {
-    if (
-      (proposal.kind === "createTasks" || proposal.kind === "createProject") &&
-      excluded.size
-    ) {
-      const filtered: Proposal =
-        proposal.kind === "createTasks"
-          ? {
-              ...proposal,
-              tasks: proposal.tasks.filter((_, i) => !excluded.has(i)),
-            }
-          : {
-              ...proposal,
-              tasks: proposal.tasks.filter((_, i) => !excluded.has(i)),
-            };
-      if (!filtered.tasks.length) return;
-      onConfirm(filtered);
+    if (!excluded.size) {
+      onConfirm(proposal);
       return;
     }
-    onConfirm(proposal);
+    const keep = <T,>(list: T[]) => list.filter((_, i) => !excluded.has(i));
+    switch (proposal.kind) {
+      case "createTasks":
+      case "createProject": {
+        const filtered: Proposal = {
+          ...proposal,
+          tasks: keep(proposal.tasks),
+        };
+        if (!filtered.tasks.length) return;
+        onConfirm(filtered);
+        return;
+      }
+      case "createMarketingEntries":
+      case "createMarketingCampaign": {
+        const filtered: Proposal = {
+          ...proposal,
+          entries: keep(proposal.entries),
+        };
+        if (!filtered.entries.length) return;
+        onConfirm(filtered);
+        return;
+      }
+      default:
+        onConfirm(proposal);
+    }
   };
 
   return (
@@ -195,6 +238,50 @@ export function ProposalPreview({
         {proposal.kind === "createTasks" && !tasks.length && (
           <p className="text-sm text-muted-foreground">No tasks in this proposal.</p>
         )}
+
+        {marketingEntries.length > 0 && (
+          <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-2">
+            <p className="text-sm">
+              <span className="text-muted-foreground">Content items:</span>{" "}
+              <span className="font-medium">{marketingEntries.length}</span>
+            </p>
+            <ul className="mt-1.5 space-y-1.5">
+              {marketingEntries.map((entry, index) => (
+                <li key={`${entry.title}-${index}`} className="flex items-start gap-2 text-sm">
+                  {editing && (
+                    <Checkbox
+                      checked={!excluded.has(index)}
+                      onCheckedChange={(checked) => {
+                        setExcluded((prev) => {
+                          const next = new Set(prev);
+                          if (checked) next.delete(index);
+                          else next.add(index);
+                          return next;
+                        });
+                      }}
+                      className="mt-0.5"
+                    />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    {editing && excluded.has(index) ? (
+                      <span className="text-muted-foreground line-through">
+                        {entry.title}
+                      </span>
+                    ) : (
+                      entry.title
+                    )}
+                    <span className="ml-1.5 text-xs text-muted-foreground">
+                      · {marketingPlatformLabel(entry.platform)} · {entry.contentType}
+                      {entry.scheduledAt !== undefined
+                        ? ` · ${relativeDayLabel(entry.scheduledAt, today)}`
+                        : " · unscheduled"}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-2 border-t border-ai/20 px-3.5 py-2.5">
@@ -212,7 +299,7 @@ export function ProposalPreview({
             size="sm"
             variant="outline"
             className={cn("h-8", editing && "border-primary text-primary")}
-            disabled={busy || !tasks.length}
+            disabled={busy || (!tasks.length && !marketingEntries.length)}
             onClick={() => setEditing((e) => !e)}
           >
             {editing ? "Done editing" : "Edit"}

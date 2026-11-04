@@ -1,7 +1,9 @@
-import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { Infer, v } from "convex/values";
+import { mutation, type MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { assertMember, requireWorkspace } from "./lib/auth";
 import { logActivity } from "./lib/activity";
+import { requireMarketingPlatform } from "../lib/marketing";
 
 const priority = v.union(v.literal("low"), v.literal("medium"), v.literal("high"));
 const taskStatus = v.union(v.literal("todo"), v.literal("in_progress"), v.literal("done"));
@@ -19,6 +21,61 @@ const taskSpec = v.object({
   dueTime: v.optional(v.string()),
   priority: v.optional(priority),
 });
+
+const marketingEntrySpec = v.object({
+  title: v.string(),
+  platform: v.string(),
+  contentType: v.string(),
+  body: v.optional(v.string()),
+  hook: v.optional(v.string()),
+  callToAction: v.optional(v.string()),
+  status: v.union(
+    v.literal("idea"),
+    v.literal("draft"),
+    v.literal("planned"),
+    v.literal("readyToPublish"),
+  ),
+  scheduledAt: v.optional(v.number()),
+});
+
+type MarketingEntrySpec = Infer<typeof marketingEntrySpec>;
+
+/**
+ * Shared insert for both marketing proposal kinds — validates the channel and
+ * derives the owner from the session, exactly like the planner's own create.
+ */
+async function insertMarketingEntries(
+  ctx: MutationCtx,
+  args: {
+    workspaceId: Id<"workspaces">;
+    userId: string;
+    entries: MarketingEntrySpec[];
+    campaignId?: Id<"campaigns">;
+  },
+) {
+  const now = Date.now();
+  for (const e of args.entries) {
+    const title = e.title.trim();
+    if (!title) throw new Error("Title is required");
+    await ctx.db.insert("marketingEntries", {
+      workspaceId: args.workspaceId,
+      title: title.slice(0, 240),
+      contentType: e.contentType.trim().slice(0, 40) || "Post",
+      platform: requireMarketingPlatform(e.platform),
+      body: e.body ?? "",
+      hook: e.hook?.trim().slice(0, 240),
+      callToAction: e.callToAction?.trim().slice(0, 240),
+      status: e.status,
+      scheduledAt: e.scheduledAt,
+      campaignId: args.campaignId,
+      tags: [],
+      // Owner always comes from the session, never from the proposal.
+      workspaceMemberId: args.userId,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
 
 /**
  * Preview → Confirm → Execute (spec §25).
@@ -75,10 +132,25 @@ export const apply = mutation({
         content: v.string(),
         category: v.optional(v.string()),
       }),
+      v.object({
+        kind: v.literal("createMarketingEntries"),
+        entries: v.array(marketingEntrySpec),
+        campaignId: v.optional(v.id("campaigns")),
+        campaignLabel: v.optional(v.string()),
+      }),
+      v.object({
+        kind: v.literal("createMarketingCampaign"),
+        name: v.string(),
+        objective: v.optional(v.string()),
+        audience: v.optional(v.string()),
+        startDate: v.optional(v.number()),
+        endDate: v.optional(v.number()),
+        entries: v.array(marketingEntrySpec),
+      }),
     ),
   },
   handler: async (ctx, args) => {
-    const { workspaceId } = await requireWorkspace(ctx);
+    const { userId, workspaceId } = await requireWorkspace(ctx);
     const now = Date.now();
     const p = args.proposal;
 
@@ -206,6 +278,56 @@ export const apply = mutation({
         const summary = `Created document "${p.title}".`;
         await logActivity(ctx, { workspaceId, actor: "ai", action: "document.created", detail: summary, route: `/app/documents/${docId}` });
         return { summary, route: `/app/documents/${docId}` };
+      }
+
+      case "createMarketingEntries": {
+        if (!p.entries.length) throw new Error("Nothing to schedule");
+        if (p.campaignId) {
+          const campaign = await ctx.db.get(p.campaignId);
+          if (!campaign || campaign.workspaceId !== workspaceId) {
+            throw new Error("Campaign not found in this workspace");
+          }
+        }
+        await insertMarketingEntries(ctx, {
+          workspaceId,
+          userId,
+          entries: p.entries,
+          campaignId: p.campaignId,
+        });
+        const where = p.campaignLabel ? ` in "${p.campaignLabel}"` : "";
+        const summary = `Added ${p.entries.length} content item${p.entries.length === 1 ? "" : "s"}${where} to the planner.`;
+        await logActivity(ctx, { workspaceId, actor: "ai", action: "marketing.content.created", detail: summary, route: "/app/marketing" });
+        return { summary, route: "/app/marketing" };
+      }
+
+      case "createMarketingCampaign": {
+        if (p.startDate !== undefined && p.endDate !== undefined && p.endDate < p.startDate) {
+          throw new Error("The end date can't be before the start date");
+        }
+        const campaignId = await ctx.db.insert("campaigns", {
+          workspaceId,
+          name: p.name.trim().slice(0, 200),
+          objective: p.objective,
+          audience: p.audience,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          status: "active",
+          workspaceMemberId: userId,
+          createdAt: now,
+          updatedAt: now,
+        });
+        await insertMarketingEntries(ctx, {
+          workspaceId,
+          userId,
+          entries: p.entries,
+          campaignId,
+        });
+        const items = p.entries.length
+          ? ` with ${p.entries.length} content item${p.entries.length === 1 ? "" : "s"}`
+          : "";
+        const summary = `Created campaign "${p.name.trim()}"${items}.`;
+        await logActivity(ctx, { workspaceId, actor: "ai", action: "marketing.campaign.created", detail: summary, route: "/app/marketing" });
+        return { summary, route: "/app/marketing" };
       }
     }
   },
