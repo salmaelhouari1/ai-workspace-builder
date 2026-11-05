@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { assertMember, requireWorkspace } from "./lib/auth";
 import { requireMarketingPlatform } from "../lib/marketing";
 
@@ -19,6 +20,56 @@ import { requireMarketingPlatform } from "../lib/marketing";
 
 const MAX_TITLE = 240;
 const MAX_PLATFORM = 40;
+const MAX_ATTACHMENTS = 6;
+
+const attachmentValidator = v.object({
+  storageId: v.id("_storage"),
+  name: v.string(),
+  contentType: v.string(),
+});
+
+type Attachment = {
+  storageId: Id<"_storage">;
+  name: string;
+  contentType: string;
+};
+
+/**
+ * Attachments are planning assets: images and short videos only, at most six
+ * per entry. Anything else is dropped rather than stored as a dead file.
+ */
+function normalizedAttachments(list: Attachment[] | undefined): Attachment[] {
+  return (list ?? [])
+    .filter(
+      (a) =>
+        a.contentType.toLowerCase().startsWith("image/") ||
+        a.contentType.toLowerCase().startsWith("video/"),
+    )
+    .slice(0, MAX_ATTACHMENTS)
+    .map((a) => ({
+      storageId: a.storageId,
+      name: a.name.trim().slice(0, 160) || "Attachment",
+      contentType: a.contentType.trim().toLowerCase().slice(0, 80),
+    }));
+}
+
+/** One-time upload URL for a planner attachment (image or video). */
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireWorkspace(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+/** Signed URL for previewing an attachment the user already uploaded. */
+export const attachmentUrl = query({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    await requireWorkspace(ctx);
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});
 
 /**
  * Channels live in ../lib/marketing so the planner UI and the assistant
@@ -119,6 +170,7 @@ const createEntry = mutation({
     pillar: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     audience: v.optional(v.string()),
+    attachments: v.optional(v.array(attachmentValidator)),
   },
   handler: async (ctx, args) => {
     const { userId, workspaceId } = await requireWorkspace(ctx);
@@ -132,6 +184,15 @@ const createEntry = mutation({
     }
     const now = Date.now();
     const title = args.title.trim().slice(0, MAX_TITLE);
+    // Only image/video attachments are kept — discard anything else (and its
+    // uploaded file) so the workspace never stores dead media.
+    const attachments = normalizedAttachments(args.attachments);
+    const keptAttachments = new Set(attachments.map((a) => a.storageId));
+    for (const a of args.attachments ?? []) {
+      if (!keptAttachments.has(a.storageId)) {
+        await ctx.storage.delete(a.storageId);
+      }
+    }
     // Double-submit guard: reject an identical record created moments ago.
     const recentEntries = await ctx.db
       .query("marketingEntries")
@@ -163,6 +224,7 @@ const createEntry = mutation({
       pillar: args.pillar?.trim().slice(0, 80),
       tags: args.tags ?? [],
       audience: args.audience?.trim().slice(0, 160),
+      attachments,
       // Owner is derived from the session — never from client input.
       workspaceMemberId: userId,
       createdAt: now,
@@ -198,6 +260,8 @@ const updateEntry = mutation({
     pillar: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
     audience: v.optional(v.string()),
+    // Full replacement list — omitted keeps the current attachments.
+    attachments: v.optional(v.array(attachmentValidator)),
   },
   handler: async (ctx, args) => {
     const entry = await ctx.db.get(args.entryId);
@@ -250,6 +314,16 @@ const updateEntry = mutation({
     if (args.tags !== undefined) patch.tags = args.tags;
     if (args.audience !== undefined) patch.audience = args.audience.trim().slice(0, 160);
     if (args.campaignId !== undefined) patch.campaignId = args.campaignId ?? undefined;
+    if (args.attachments !== undefined) {
+      const next = normalizedAttachments(args.attachments);
+      patch.attachments = next;
+      // Files removed from the entry (or rejected by validation) are deleted
+      // from storage so a workspace never keeps orphaned media.
+      const kept = new Set(next.map((a) => a.storageId));
+      for (const old of [...(entry.attachments ?? []), ...args.attachments]) {
+        if (!kept.has(old.storageId)) await ctx.storage.delete(old.storageId);
+      }
+    }
 
     await ctx.db.patch(args.entryId, patch);
     return { ok: true };
@@ -262,6 +336,9 @@ const removeEntry = mutation({
     const entry = await ctx.db.get(args.entryId);
     if (!entry) throw new Error("Content entry not found");
     await assertMember(ctx, entry.workspaceId);
+    for (const attachment of entry.attachments ?? []) {
+      await ctx.storage.delete(attachment.storageId);
+    }
     await ctx.db.delete(args.entryId);
     return { ok: true };
   },

@@ -16,7 +16,17 @@ export const dashboard = query({
   args: {},
   handler: async (ctx) => {
     const { workspaceId, userId } = await requireWorkspace(ctx);
-    const [workspace, user, tasks, projects, goals, inbox] = await Promise.all([
+    const [
+      workspace,
+      user,
+      tasks,
+      projects,
+      goals,
+      inbox,
+      campaigns,
+      posts,
+      activity,
+    ] = await Promise.all([
       ctx.db.get(workspaceId),
       ctx.db.get(userId),
       ctx.db
@@ -37,6 +47,19 @@ export const dashboard = query({
           q.eq("workspaceId", workspaceId).eq("status", "pending"),
         )
         .take(50),
+      ctx.db
+        .query("campaigns")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .take(50),
+      ctx.db
+        .query("marketingEntries")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .take(200),
+      ctx.db
+        .query("activityLog")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .order("desc")
+        .take(6),
     ]);
 
     const now = Date.now();
@@ -113,6 +136,62 @@ export const dashboard = query({
         dueTime: t.dueTime,
         projectId: t.projectId,
         projectName: t.projectId ? projectName.get(t.projectId) : undefined,
+      }));
+
+    // ---- Marketing: what is coming up next --------------------------------
+    const campaignName = new Map(campaigns.map((c) => [c._id, c.name]));
+    const upcomingPosts = posts
+      .filter(
+        (p) =>
+          p.scheduledAt !== undefined &&
+          p.scheduledAt >= now &&
+          p.status !== "published",
+      )
+      .sort((a, b) => (a.scheduledAt ?? 0) - (b.scheduledAt ?? 0))
+      .slice(0, 4)
+      .map((p) => ({
+        id: p._id,
+        title: p.title,
+        platform: p.platform,
+        contentType: p.contentType,
+        status: p.status,
+        scheduledAt: p.scheduledAt ?? null,
+        campaignName: p.campaignId
+          ? campaignName.get(p.campaignId) ?? null
+          : null,
+        hasMedia: (p.attachments ?? []).length > 0,
+      }));
+
+    const scheduledPostCount = posts.filter(
+      (p) =>
+        p.scheduledAt !== undefined &&
+        p.scheduledAt >= now &&
+        p.status !== "published",
+    ).length;
+
+    // ---- Pending tasks ----------------------------------------------------
+    const priorityRank = (p: string) =>
+      p === "high" ? 0 : p === "medium" ? 1 : 2;
+    const openTasks = [...open]
+      .sort((a, b) => {
+        const aDue = a.dueDate ?? Number.POSITIVE_INFINITY;
+        const bDue = b.dueDate ?? Number.POSITIVE_INFINITY;
+        return (
+          aDue - bDue ||
+          priorityRank(a.priority) - priorityRank(b.priority) ||
+          a.createdAt - b.createdAt
+        );
+      })
+      .slice(0, 6)
+      .map((t) => ({
+        id: t._id,
+        title: t.title,
+        priority: t.priority,
+        status: t.status,
+        dueDate: t.dueDate ?? null,
+        dueTime: t.dueTime ?? null,
+        projectId: t.projectId ?? null,
+        projectName: t.projectId ? projectName.get(t.projectId) ?? null : null,
       }));
 
     // ---- Active projects --------------------------------------------------
@@ -387,10 +466,22 @@ export const dashboard = query({
       goals: goalItems,
       upcoming: upcoming.slice(0, 6),
       insights: insights.slice(0, 4),
+      upcomingPosts,
+      openTasks,
+      recentActivity: activity.map((a) => ({
+        id: a._id,
+        actor: a.actor,
+        action: a.action,
+        detail: a.detail,
+        route: a.route ?? null,
+        createdAt: a.createdAt,
+      })),
       counts: {
         openTasks: open.length,
         projects: projects.filter((p) => p.status === "active").length,
         pendingInbox,
+        scheduledPosts: scheduledPostCount,
+        drafts: posts.filter((p) => p.status === "draft").length,
       },
     };
   },

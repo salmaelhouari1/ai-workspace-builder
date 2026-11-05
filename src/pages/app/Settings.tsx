@@ -1,10 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
-import { TYPE_DISPLAY, typeDisplay } from "@/lib/modules";
+import { typeDisplay } from "@/lib/modules";
 import { CookieSettingsLink } from "@/components/CookieConsent";
 import { cn } from "@/lib/utils";
 import {
@@ -139,55 +138,12 @@ export default function Settings() {
   const { user, signOut } = useAuth();
   const workspace = useQuery(api.workspaces.getForMe);
   const activity = useQuery(api.activity.recent);
-  const updateWorkspace = useMutation(api.workspaces.update);
   const team = useQuery(api.team.list);
   const addTeamMember = useMutation(api.team.add);
   const removeTeamMember = useMutation(api.team.remove);
 
-  const [name, setName] = useState("");
-  const [mainGoal, setMainGoal] = useState("");
-  const [businessType, setBusinessType] = useState("general");
-  const [teamSize, setTeamSize] = useState("Just me");
-  const [stage, setStage] = useState("Getting started");
-  const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
   const [emailDraft, setEmailDraft] = useState("");
   const [adding, setAdding] = useState(false);
-
-  // Sync the form from the workspace record — React's "adjust state during
-  // render" pattern. Runs while the user isn't editing, so a live update
-  // never clobbers their typing.
-  const [syncedWorkspace, setSyncedWorkspace] = useState(workspace);
-  if (workspace !== syncedWorkspace) {
-    setSyncedWorkspace(workspace);
-    if (workspace && !dirty) {
-      setName(workspace.name);
-      setMainGoal(workspace.mainGoal ?? "");
-      setBusinessType(workspace.businessType);
-      setTeamSize(workspace.teamSize ?? "Just me");
-      setStage(workspace.stage ?? "Getting started");
-    }
-  }
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await updateWorkspace({
-        name: name.trim() || undefined,
-        mainGoal,
-        businessType,
-        teamSize,
-        stage,
-      });
-      setDirty(false);
-      toast.success("Workspace updated");
-    } catch (err) {
-      console.error(err);
-      toast.error("Couldn't save the changes");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const submitMember = async () => {
     const email = emailDraft.trim();
@@ -227,11 +183,11 @@ export default function Settings() {
         </p>
       </header>
 
-      {/* Workspace */}
+      {/* The profile itself lives on its own page — one source of truth. */}
       <section className="mt-6 rounded-2xl border border-border/70 bg-card p-5">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           <Building2 className="size-4 text-primary" />
-          Workspace
+          Business profile
           <Badge
             variant="secondary"
             className="ml-auto text-[10px] font-medium"
@@ -239,98 +195,22 @@ export default function Settings() {
             {typeDisplay(workspace.businessType)}
           </Badge>
         </h2>
-
-        <div className="mt-4 grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="ws-name">Name</Label>
-            <Input
-              id="ws-name"
-              value={name}
-              onChange={(e) => {
-                setName(e.target.value);
-                setDirty(true);
-              }}
-            />
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{workspace.name}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {workspace.mainGoal ?? "No main goal set yet"}
+            </p>
           </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="ws-goal">Main goal</Label>
-            <Input
-              id="ws-goal"
-              value={mainGoal}
-              placeholder="e.g. Launch next month"
-              onChange={(e) => {
-                setMainGoal(e.target.value);
-                setDirty(true);
-              }}
-            />
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label>Business type</Label>
-              <select
-                value={businessType}
-                onChange={(e) => {
-                  setBusinessType(e.target.value);
-                  setDirty(true);
-                }}
-                className="h-9 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus:border-ring"
-              >
-                {Object.entries(TYPE_DISPLAY).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid gap-2">
-              <Label>Team size</Label>
-              <select
-                value={teamSize}
-                onChange={(e) => {
-                  setTeamSize(e.target.value);
-                  setDirty(true);
-                }}
-                className="h-9 rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus:border-ring"
-              >
-                {["Just me", "2–5", "6–10", "10+"].map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Stage</Label>
-            <div className="flex flex-wrap gap-2">
-              {["Idea", "Getting started", "Running", "Growing"].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    setStage(s);
-                    setDirty(true);
-                  }}
-                  className={cn(
-                    "rounded-lg border px-3 py-1.5 text-sm transition-colors",
-                    stage === s
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border/80 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <Button onClick={save} disabled={!dirty || saving || !name.trim()}>
-              {saving ? "Saving…" : "Save changes"}
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => navigate("/app/business-profile")}
+          >
+            <Building2 className="size-3.5" />
+            Edit business profile
+          </Button>
         </div>
       </section>
 

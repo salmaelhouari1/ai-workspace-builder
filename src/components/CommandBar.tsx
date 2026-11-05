@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
 import { parseTask, relativeDayLabel } from "@/lib/nlp";
-import { navEntries, typeDisplay } from "@/lib/modules";
+import { allNavEntries, typeDisplay } from "@/lib/modules";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useNavigate } from "react-router";
@@ -73,7 +73,7 @@ export function CommandBar({ open, onOpenChange }: CommandBarProps) {
     if (!open) setQuery("");
   }, [open]);
 
-  const nav = useMemo(() => navEntries(workspace?.businessType), [workspace?.businessType]);
+  const nav = useMemo(() => allNavEntries(), []);
 
   // ---- Natural-language intents ----------------------------------------
   const taskMatch = useMemo(() => {

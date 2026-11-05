@@ -42,17 +42,23 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Film,
+  ImageIcon,
   Lightbulb,
   Megaphone,
+  Paperclip,
   Pencil,
   Plus,
   Search,
   Sparkles,
   Target,
   Trash2,
+  Upload,
+  X,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
+import { useLocation, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 // ---------------------------------------------------------------------------
@@ -68,10 +74,11 @@ const STATUSES = [
 ] as const;
 type Status = (typeof STATUSES)[number];
 
+// The stored value stays `planned`; the workspace language is "Scheduled".
 const STATUS_LABEL: Record<Status, string> = {
   idea: "Idea",
   draft: "Draft",
-  planned: "Planned",
+  planned: "Scheduled",
   readyToPublish: "Ready to publish",
   published: "Published",
 };
@@ -181,6 +188,61 @@ function dayKey(d: Date): string {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
+type Attachment = {
+  storageId: Id<"_storage">;
+  name: string;
+  contentType: string;
+};
+
+const MAX_ATTACHMENTS = 6;
+
+/** Small image/video preview for an attachment stored in Convex storage. */
+function AttachmentThumb({
+  attachment,
+  onRemove,
+}: {
+  attachment: Attachment;
+  onRemove?: () => void;
+}) {
+  const url = useQuery(api.marketing.attachmentUrl, {
+    storageId: attachment.storageId,
+  });
+  const isImage = attachment.contentType.startsWith("image/");
+
+  return (
+    <div className="group relative overflow-hidden rounded-lg border border-border/70 bg-background">
+      {url && isImage ? (
+        <img
+          src={url}
+          alt={attachment.name}
+          className="h-16 w-24 object-cover"
+        />
+      ) : (
+        <div className="flex h-16 w-24 flex-col items-center justify-center gap-1 px-1 text-muted-foreground">
+          {isImage ? (
+            <ImageIcon className="size-4" />
+          ) : (
+            <Film className="size-4" />
+          )}
+          <span className="w-full truncate text-center text-[9px]">
+            {attachment.name}
+          </span>
+        </div>
+      )}
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${attachment.name}`}
+          className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-background/90 text-muted-foreground shadow-sm transition-colors hover:text-destructive"
+        >
+          <X className="size-3" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function errMsg(err: unknown, fallback: string): string {
   const raw = err instanceof Error ? err.message : "";
   const idx = raw.lastIndexOf("Error: ");
@@ -207,6 +269,7 @@ interface EntryDraft {
   pillar: string;
   tags: string;
   audience: string;
+  attachments: Attachment[];
 }
 
 const EMPTY_ENTRY: EntryDraft = {
@@ -223,6 +286,7 @@ const EMPTY_ENTRY: EntryDraft = {
   pillar: "",
   tags: "",
   audience: "",
+  attachments: [],
 };
 
 interface IdeaDraft {
@@ -273,38 +337,6 @@ const EMPTY_CAMPAIGN: CampaignDraft = {
 
 type Tab = "calendar" | "ideas" | "content" | "campaigns";
 
-const FEATURES: {
-  key: Tab;
-  icon: typeof CalendarDays;
-  title: string;
-  desc: string;
-}[] = [
-  {
-    key: "calendar",
-    icon: CalendarDays,
-    title: "Content Calendar",
-    desc: "Organize your content and see what's coming next.",
-  },
-  {
-    key: "ideas",
-    icon: Lightbulb,
-    title: "Content Ideas",
-    desc: "Capture ideas before they get lost.",
-  },
-  {
-    key: "content",
-    icon: FileText,
-    title: "Content Creation",
-    desc: "Turn ideas into content ready for review.",
-  },
-  {
-    key: "campaigns",
-    icon: Target,
-    title: "Campaigns",
-    desc: "Keep your marketing activities connected to your goals.",
-  },
-];
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -327,6 +359,7 @@ export default function Marketing() {
   const updateCampaign = useMutation(api.marketing.updateCampaign);
   const removeCampaign = useMutation(api.marketing.removeCampaign);
   const generate = useAction(api.assistant.chat);
+  const generateUploadUrl = useMutation(api.marketing.generateUploadUrl);
 
   const [tab, setTab] = useState<Tab>("calendar");
   const [filters, setFilters] = useState({
@@ -356,6 +389,7 @@ export default function Marketing() {
   } | null>(null);
 
   const [calView, setCalView] = useState<"month" | "week" | "list">("month");
+  const [uploading, setUploading] = useState(false);
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -365,6 +399,24 @@ export default function Marketing() {
     now.setHours(0, 0, 0, 0);
     return now;
   });
+
+  // Deep link from the Overview quick actions: /app/marketing?new=post.
+  // Keyed by navigation so the same link opens the dialog on every visit.
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const newParam = searchParams.get("new");
+  const [handledNewFor, setHandledNewFor] = useState<string | null>(null);
+  if (newParam === "post" && handledNewFor !== location.key) {
+    setHandledNewFor(location.key);
+    setEntryDraft({ ...EMPTY_ENTRY });
+    setEntryOpen(true);
+  }
+  useEffect(() => {
+    if (newParam === null) return;
+    const params = new URLSearchParams(searchParams);
+    params.delete("new");
+    setSearchParams(params, { replace: true });
+  }, [newParam, searchParams, setSearchParams]);
 
   // -- Derived ---------------------------------------------------------------
 
@@ -478,6 +530,7 @@ export default function Marketing() {
       pillar: e.pillar ?? "",
       tags: (e.tags ?? []).join(", "),
       audience: e.audience ?? "",
+      attachments: (e.attachments ?? []) as Attachment[],
     });
     setEntryOpen(true);
   };
@@ -517,6 +570,7 @@ export default function Marketing() {
           pillar: entryDraft.pillar.trim(),
           tags,
           audience: entryDraft.audience.trim(),
+          attachments: entryDraft.attachments,
         });
         toast.success("Content updated");
       } else {
@@ -534,6 +588,7 @@ export default function Marketing() {
           pillar: entryDraft.pillar.trim() || undefined,
           tags,
           audience: entryDraft.audience.trim() || undefined,
+          attachments: entryDraft.attachments,
         });
         toast.success("Content created");
       }
@@ -543,6 +598,46 @@ export default function Marketing() {
       toast.error(errMsg(err, "Couldn't save this content"));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const uploadAttachments = async (files: FileList | null) => {
+    const list = Array.from(files ?? []).filter(
+      (f) => f.type.startsWith("image/") || f.type.startsWith("video/"),
+    );
+    if (!list.length) {
+      if (files && files.length) {
+        toast.error("Attachments need to be an image or a video");
+      }
+      return;
+    }
+    setUploading(true);
+    try {
+      const next = [...entryDraft.attachments];
+      for (const file of list) {
+        if (next.length >= MAX_ATTACHMENTS) {
+          toast.error(`Up to ${MAX_ATTACHMENTS} attachments per content item`);
+          break;
+        }
+        // Each upload gets its own one-time URL.
+        const uploadUrl = await generateUploadUrl();
+        const res = await fetch(uploadUrl, {
+          method: "POST",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+        if (!res.ok) throw new Error("Upload failed");
+        const { storageId } = (await res.json()) as {
+          storageId: Id<"_storage">;
+        };
+        next.push({ storageId, name: file.name, contentType: file.type });
+      }
+      setEntryDraft((d) => ({ ...d, attachments: next }));
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't upload that file — try again");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -898,7 +993,7 @@ export default function Marketing() {
             execute.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button className="gap-2" onClick={openNewCampaign}>
             <Target className="size-4" />
             Plan a campaign
@@ -926,36 +1021,6 @@ export default function Marketing() {
             <p className="mt-0.5 text-xs text-muted-foreground">{s.label}</p>
           </div>
         ))}
-      </div>
-
-      {/* Feature cards */}
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {FEATURES.map((f) => {
-          const Icon = f.icon;
-          const active = tab === f.key;
-          return (
-            <button
-              key={f.key}
-              onClick={() => setTab(f.key)}
-              className={cn(
-                "group rounded-2xl border bg-card p-4 text-left transition-colors",
-                active
-                  ? "border-primary/50 ring-1 ring-primary/20"
-                  : "border-border/70 hover:border-primary/40",
-              )}
-            >
-              <span className="flex items-center gap-2.5">
-                <span className="flex size-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Icon className="size-4" />
-                </span>
-                <span className="font-semibold">{f.title}</span>
-              </span>
-              <span className="mt-1.5 block text-sm text-muted-foreground">
-                {f.desc}
-              </span>
-            </button>
-          );
-        })}
       </div>
 
       {/* Tabs */}
@@ -1037,7 +1102,7 @@ export default function Marketing() {
             </div>
           </div>
 
-          {scheduledEntries.length === 0 ? (
+          {filteredEntries.length === 0 ? (
             <EmptyState
               icon={<CalendarDays className="size-5" />}
               title="No content planned yet"
@@ -1156,21 +1221,46 @@ export default function Marketing() {
               })}
             </div>
           ) : (
-            <div className="space-y-2">
-              {[...scheduledEntries]
-                .sort((a, b) => a.scheduledAt - b.scheduledAt)
+            <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
+              {[...filteredEntries]
+                .sort((a, b) => {
+                  if (a.scheduledAt && b.scheduledAt)
+                    return a.scheduledAt - b.scheduledAt;
+                  if (a.scheduledAt) return -1;
+                  if (b.scheduledAt) return 1;
+                  return b.updatedAt - a.updatedAt;
+                })
                 .map((e) => (
                   <button
                     key={e._id}
                     onClick={() => openEditEntry(e)}
-                    className="flex w-full items-center gap-3 rounded-xl border border-border/70 bg-card p-3 text-left hover:border-primary/40"
+                    className="flex w-full items-center gap-3 border-b border-border/50 p-3 text-left transition-colors last:border-b-0 hover:bg-accent/40"
                   >
                     {statusChip(e.status)}
-                    <span className="min-w-0 flex-1 truncate font-medium">
-                      {e.title}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {e.title}
+                      </span>
+                      <span className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
+                        <span>{platformLabel(e.platform)}</span>
+                        <span aria-hidden>·</span>
+                        <span>{e.contentType}</span>
+                        {e.campaignName && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span>{e.campaignName}</span>
+                          </>
+                        )}
+                      </span>
                     </span>
-                    <span className="shrink-0 text-sm text-muted-foreground">
-                      {formatWhen(e.scheduledAt)}
+                    {(e.attachments?.length ?? 0) > 0 && (
+                      <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+                        <Paperclip className="size-3" />
+                        {e.attachments?.length}
+                      </span>
+                    )}
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {e.scheduledAt ? formatWhen(e.scheduledAt) : "Unscheduled"}
                     </span>
                   </button>
                 ))}
@@ -1319,23 +1409,12 @@ export default function Marketing() {
         {/* --------------------------------------------------- Content ---- */}
         <TabsContent value="content" className="mt-4 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-48 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={filters.search}
-                onChange={(e) =>
-                  setFilters((f) => ({ ...f, search: e.target.value }))
-                }
-                placeholder="Search content…"
-                className="pl-9"
-              />
-            </div>
+            <div className="flex-1">{filterBar}</div>
             <Button className="gap-2" onClick={openNewEntry}>
               <Plus className="size-4" />
               Add content
             </Button>
           </div>
-          {filterBar}
 
           {filteredEntries.length === 0 ? (
             <EmptyState
@@ -1369,6 +1448,12 @@ export default function Marketing() {
                       <span>{e.contentType}</span>
                       <span>{formatWhen(e.scheduledAt)}</span>
                       {e.campaignName && <span>{e.campaignName}</span>}
+                      {(e.attachments?.length ?? 0) > 0 && (
+                        <span className="inline-flex items-center gap-1">
+                          <Paperclip className="size-3" />
+                          {e.attachments?.length} attached
+                        </span>
+                      )}
                     </div>
                   </button>
                   <div className="flex shrink-0 gap-1">
@@ -1764,6 +1849,62 @@ export default function Marketing() {
                 }
                 placeholder="Asset reference, angle, links, reminders…"
               />
+            </div>
+
+            <div className="space-y-2 sm:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="entry-attachments">
+                  Images &amp; video
+                  <span className="ml-1.5 font-normal text-muted-foreground">
+                    optional · up to {MAX_ATTACHMENTS}
+                  </span>
+                </Label>
+                <label
+                  htmlFor="entry-attachments"
+                  className={cn(
+                    "inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border/80 px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent/60",
+                    uploading && "pointer-events-none opacity-60",
+                  )}
+                >
+                  <Upload className="size-3.5" />
+                  {uploading ? "Uploading…" : "Upload file"}
+                </label>
+                <input
+                  id="entry-attachments"
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  className="sr-only"
+                  disabled={uploading}
+                  onChange={(e) => {
+                    void uploadAttachments(e.target.files);
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+              {entryDraft.attachments.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border/70 px-3 py-2.5 text-xs text-muted-foreground">
+                  Add the visual that goes with this post — it stays in OCIVO
+                  as part of the plan, it is never published.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {entryDraft.attachments.map((attachment) => (
+                    <AttachmentThumb
+                      key={attachment.storageId}
+                      attachment={attachment}
+                      onRemove={() =>
+                        setEntryDraft((d) => ({
+                          ...d,
+                          attachments: d.attachments.filter(
+                            (a) => a.storageId !== attachment.storageId,
+                          ),
+                        }))
+                      }
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

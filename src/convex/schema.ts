@@ -256,6 +256,17 @@ const schema = defineSchema(
       callToAction: v.optional(v.string()),
       // Optional creative brief / asset reference (e.g. a document id).
       creativeBrief: v.optional(v.string()),
+      // Image/video attachments held in Convex file storage. Planning only —
+      // nothing is ever uploaded to a social platform from here.
+      attachments: v.optional(
+        v.array(
+          v.object({
+            storageId: v.id("_storage"),
+            name: v.string(),
+            contentType: v.string(),
+          }),
+        ),
+      ),
       // One of the five lifecycle statuses (statuses are the single source
       // of truth for the planner).
       status: v.union(

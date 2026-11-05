@@ -631,3 +631,79 @@ describe("marketing proposals", () => {
     ).rejects.toThrow("The end date can't be before the start date");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Planner attachments: image/video only, cleaned up with the record.
+// ---------------------------------------------------------------------------
+
+describe("attachments", () => {
+  async function upload(t: T, type = "image/png") {
+    return await t.run((ctx) =>
+      ctx.storage.store(new Blob(["pixel"], { type })),
+    );
+  }
+
+  test("keeps image/video attachments and lists them with the entry", async () => {
+    const { t, user } = await seeded();
+    const storageId = await upload(t);
+    const entryId = await user.mutation(api.marketing.create, {
+      ...entryArgs(),
+      attachments: [
+        { storageId, name: "cover.png", contentType: "image/png" },
+      ],
+    });
+
+    const rows = await user.query(api.marketing.list, {});
+    const entry = rows.find((r) => r._id === entryId);
+    expect(entry?.attachments).toHaveLength(1);
+    expect(entry?.attachments?.[0].name).toBe("cover.png");
+  });
+
+  test("deleting the entry deletes its files", async () => {
+    const { t, user } = await seeded();
+    const storageId = await upload(t);
+    const entryId = await user.mutation(api.marketing.create, {
+      ...entryArgs(),
+      attachments: [
+        { storageId, name: "clip.mp4", contentType: "video/mp4" },
+      ],
+    });
+
+    await user.mutation(api.marketing.remove, { entryId });
+    const file = await t.run((ctx) => ctx.storage.get(storageId));
+    expect(file).toBeNull();
+  });
+
+  test("removing an attachment on update deletes the stored file", async () => {
+    const { t, user } = await seeded();
+    const storageId = await upload(t);
+    const entryId = await user.mutation(api.marketing.create, {
+      ...entryArgs(),
+      attachments: [
+        { storageId, name: "cover.png", contentType: "image/png" },
+      ],
+    });
+
+    await user.mutation(api.marketing.update, { entryId, attachments: [] });
+    const doc = await t.run((ctx) => ctx.db.get(entryId));
+    expect(doc?.attachments ?? []).toHaveLength(0);
+    const file = await t.run((ctx) => ctx.storage.get(storageId));
+    expect(file).toBeNull();
+  });
+
+  test("non-media files are dropped and their uploads removed", async () => {
+    const { t, user } = await seeded();
+    const storageId = await upload(t, "application/pdf");
+    const entryId = await user.mutation(api.marketing.create, {
+      ...entryArgs(),
+      attachments: [
+        { storageId, name: "brief.pdf", contentType: "application/pdf" },
+      ],
+    });
+
+    const doc = await t.run((ctx) => ctx.db.get(entryId));
+    expect(doc?.attachments ?? []).toHaveLength(0);
+    const file = await t.run((ctx) => ctx.storage.get(storageId));
+    expect(file).toBeNull();
+  });
+});

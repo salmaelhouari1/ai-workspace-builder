@@ -223,6 +223,8 @@ export const update = mutation({
     teamSize: v.optional(v.string()),
     stage: v.optional(v.string()),
     businessType: v.optional(v.string()),
+    // The business description the assistant reads as context.
+    prompt: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { workspaceId } = await requireWorkspace(ctx);
@@ -233,6 +235,8 @@ export const update = mutation({
     if (args.name !== undefined && args.name.trim())
       patch.name = args.name.trim();
     if (args.mainGoal !== undefined) patch.mainGoal = args.mainGoal;
+    if (args.prompt !== undefined)
+      patch.prompt = args.prompt.trim().slice(0, 4000);
     if (args.teamSize !== undefined) patch.teamSize = args.teamSize;
     if (args.stage !== undefined) patch.stage = args.stage;
     if (

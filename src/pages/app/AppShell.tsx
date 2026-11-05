@@ -18,8 +18,9 @@ import {
 } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/use-auth";
 import {
-  navEntries,
-  settingsEntry,
+  isNavActive,
+  navGroups,
+  routeTitle,
   typeDisplay,
   type NavEntry,
 } from "@/lib/modules";
@@ -27,70 +28,90 @@ import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import { useQuery } from "convex/react";
 import {
-  Home,
-  ListChecks,
-  FolderKanban,
-  Inbox,
+  ChevronRight,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   Settings,
   Sparkles,
   UserRound,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router";
 
-function useSectionTitle(pathname: string): string {
-  return useMemo(() => {
-    const map: Record<string, string> = {
-      "/app": "Home",
-      "/app/inbox": "Inbox",
-      "/app/tasks": "My Tasks",
-      "/app/calendar": "Calendar",
-      "/app/projects": "Projects",
-      "/app/documents": "Documents",
-      "/app/goals": "Goals",
-      "/app/ai": "AI Assistant",
-      "/app/settings": "Settings",
-    };
-    if (map[pathname]) return map[pathname];
-    if (pathname.startsWith("/app/projects/")) return "Project";
-    if (pathname.startsWith("/app/documents/")) return "Document";
-    return "OCIVO";
-  }, [pathname]);
+const SIDEBAR_KEY = "ocivo.sidebar.collapsed";
+
+function readCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 function NavItem({
   entry,
   active,
   badge,
+  collapsed = false,
   onNavigate,
 }: {
   entry: NavEntry;
   active: boolean;
   badge?: number;
+  collapsed?: boolean;
   onNavigate?: () => void;
 }) {
   const Icon = entry.icon;
+
+  if (collapsed) {
+    return (
+      <Link
+        to={entry.to}
+        onClick={onNavigate}
+        title={entry.label}
+        aria-label={entry.label}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "relative mx-auto flex size-10 items-center justify-center rounded-xl transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          active
+            ? "bg-card text-foreground shadow-[inset_2px_0_0_var(--primary)]"
+            : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-foreground",
+        )}
+      >
+        <Icon className="size-[18px]" />
+        {badge !== undefined && badge > 0 && (
+          <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" />
+        )}
+      </Link>
+    );
+  }
+
   return (
     <Link
       to={entry.to}
       onClick={onNavigate}
-      className={cn(
-        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        active
-          ? "bg-sidebar-accent text-foreground shadow-[inset_2px_0_0_var(--primary)]"
-          : "text-sidebar-foreground/75 hover:bg-sidebar-accent/70 hover:text-foreground",
-      )}
       aria-current={active ? "page" : undefined}
+      className={cn(
+        "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active
+          ? "bg-card text-foreground shadow-[inset_2px_0_0_var(--primary)]"
+          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/70 hover:text-foreground",
+      )}
     >
-      <Icon className="size-4 shrink-0 opacity-80" />
+      <Icon
+        className={cn(
+          "size-4 shrink-0",
+          active ? "text-primary" : "text-muted-foreground",
+        )}
+      />
       <span className="truncate">{entry.label}</span>
       {badge !== undefined && badge > 0 && (
         <span
           className={cn(
-            "ml-auto rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
+            "ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
             active
               ? "bg-primary text-primary-foreground"
               : "bg-muted text-muted-foreground",
@@ -107,13 +128,22 @@ export default function AppShell({ businessType }: { businessType: string }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const workspace = useQuery(api.workspaces.getForMe);
   const badges = useQuery(api.workspaces.navBadges);
   const [menuOpen, setMenuOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
-  const title = useSectionTitle(location.pathname);
+  const [collapsed, setCollapsed] = useState(readCollapsed);
 
-  const entries = useMemo(() => navEntries(businessType), [businessType]);
-  const settings = useMemo(() => settingsEntry(businessType), [businessType]);
+  const { group, title } = routeTitle(location.pathname);
+  const groups = navGroups();
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
+    } catch {
+      // Private mode / storage disabled — the preference just won't persist.
+    }
+  }, [collapsed]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -126,13 +156,8 @@ export default function AppShell({ businessType }: { businessType: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  useEffect(() => setMenuOpen(false), [location.pathname]);
-
-  const isActive = (to: string) =>
-    to === "/app"
-      ? location.pathname === "/app"
-      : location.pathname.startsWith(to);
-
+  // The sheet closes from its own onNavigate handlers, so no route effect is
+  // needed here (and no effect-driven state update on every navigation).
   const badgeFor = (entry: NavEntry) =>
     entry.badge === "inbox"
       ? badges?.inbox
@@ -140,89 +165,144 @@ export default function AppShell({ businessType }: { businessType: string }) {
         ? badges?.tasks
         : undefined;
 
-  const sidebarNav = (
-    <nav className="flex flex-col gap-1 px-3">
-      {entries.map((entry) => (
-        <NavItem
-          key={entry.key}
-          entry={entry}
-          active={isActive(entry.to)}
-          badge={badgeFor(entry)}
-          onNavigate={() => setMenuOpen(false)}
-        />
-      ))}
-    </nav>
-  );
-
   const userInitial = (user?.name ?? user?.email ?? "?")
     .trim()
     .charAt(0)
     .toUpperCase();
 
+  const groupsFor = (collapsedMode: boolean, onNavigate?: () => void) => (
+    <nav className="flex flex-col gap-4" aria-label="Main">
+      {groups.map((navGroup, index) => (
+        <div key={navGroup.key} className="flex flex-col gap-0.5">
+          {collapsedMode ? (
+            index > 0 && (
+              <div className="mx-auto mb-2 h-px w-6 bg-sidebar-border" />
+            )
+          ) : (
+            <p className="mb-1 px-2.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
+              {navGroup.label}
+            </p>
+          )}
+          {navGroup.entries.map((entry) => (
+            <NavItem
+              key={entry.key}
+              entry={entry}
+              active={isNavActive(entry, location.pathname)}
+              badge={badgeFor(entry)}
+              collapsed={collapsedMode}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
+      ))}
+    </nav>
+  );
+
   return (
     <div className="app-shell flex h-dvh overflow-hidden bg-background">
       {/* ---------- Desktop sidebar ---------- */}
-      <aside className="no-print hidden w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar md:flex">
-        <div className="flex items-center gap-2.5 px-5 py-5">
-          <BrandMark className="size-8" />
-          <div className="min-w-0 leading-tight">
-            <Wordmark />
-            <div className="truncate text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              {typeDisplay(businessType)}
-            </div>
-          </div>
-        </div>
-
-        <div className="mx-5 mb-3 rounded-xl border border-border/70 bg-card/70 px-3.5 py-2.5">
-          <p className="truncate text-sm font-semibold text-foreground">
-            {user?.name?.split(" ")[0]
-              ? `${user.name.split(" ")[0]}'s workspace`
-              : "Your workspace"}
-          </p>
-          <p className="text-xs text-muted-foreground">Built by OCIVO</p>
-        </div>
-
-        <div className="flex-1 overflow-y-auto pb-4">
-          {sidebarNav}
-          <div className="my-3 mx-5 border-t border-border/70" />
-          <div className="px-3">
-            <NavItem entry={settings} active={isActive(settings.to)} />
-          </div>
-        </div>
-
-        <div className="border-t border-sidebar-border p-3">
-          <div className="flex items-center gap-3 rounded-lg px-2 py-1.5">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/12 text-xs font-bold text-primary">
-              {userInitial}
-            </span>
-            <div className="min-w-0 flex-1 leading-tight">
-              <p className="truncate text-sm font-medium">
-                {user?.name ?? "You"}
-              </p>
-              <p className="truncate text-xs text-muted-foreground">
-                {user?.email ?? "Signed in"}
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 text-muted-foreground hover:text-destructive"
-              title="Sign out"
-              onClick={async () => {
-                await signOut();
-                navigate("/");
-              }}
+      <aside
+        className={cn(
+          "no-print hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out md:flex",
+          collapsed ? "w-[72px]" : "w-[264px]",
+        )}
+      >
+        <div
+          className={cn(
+            "flex h-14 items-center gap-2.5 border-b border-sidebar-border/70",
+            collapsed ? "justify-center px-2" : "px-4",
+          )}
+        >
+          <Link
+            to="/app"
+            aria-label="OCIVO overview"
+            className="flex min-w-0 items-center gap-2.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <BrandMark className="size-8 shrink-0" />
+            {!collapsed && <Wordmark />}
+          </Link>
+          {!collapsed && (
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              className="ml-auto flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
             >
-              <LogOut className="size-4" />
-            </Button>
-          </div>
+              <PanelLeftClose className="size-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2.5 py-4">
+          {!collapsed && (
+            <div className="mb-4 rounded-xl border border-sidebar-border/80 bg-background/40 px-3 py-2.5">
+              <p className="truncate text-[13px] font-semibold leading-tight">
+                {workspace?.name ?? "Your workspace"}
+              </p>
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                {typeDisplay(businessType)} workspace
+              </p>
+            </div>
+          )}
+          {groupsFor(collapsed)}
+        </div>
+
+        <div className="border-t border-sidebar-border p-2.5">
+          {collapsed ? (
+            <div className="flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCollapsed(false)}
+                className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+                aria-label="Expand sidebar"
+                title="Expand sidebar"
+              >
+                <PanelLeftOpen className="size-4" />
+              </button>
+              <Link
+                to="/app/settings"
+                className="flex size-9 items-center justify-center rounded-full bg-primary/12 text-xs font-bold text-primary"
+                aria-label="Account settings"
+                title={user?.name ?? "Account"}
+              >
+                {userInitial}
+              </Link>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5 rounded-lg px-1.5 py-1.5">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/12 text-xs font-bold text-primary">
+                {userInitial}
+              </span>
+              <div className="min-w-0 flex-1 leading-tight">
+                <p className="truncate text-[13px] font-medium">
+                  {user?.name ?? "You"}
+                </p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {user?.email ?? "Signed in"}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 text-muted-foreground hover:text-destructive"
+                title="Sign out"
+                aria-label="Sign out"
+                onClick={async () => {
+                  await signOut();
+                  navigate("/");
+                }}
+              >
+                <LogOut className="size-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </aside>
 
       {/* ---------- Main column ---------- */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="no-print flex h-14 shrink-0 items-center gap-2 border-b border-border/70 bg-card/60 px-3 backdrop-blur md:px-6">
-          {/* Mobile menu */}
+        <header className="no-print flex h-14 shrink-0 items-center gap-2 border-b border-border/70 bg-background/70 px-3 backdrop-blur md:px-6">
           <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
             <SheetTrigger asChild>
               <Button
@@ -234,40 +314,59 @@ export default function AppShell({ businessType }: { businessType: string }) {
                 <Menu className="size-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-72 bg-sidebar p-0">
-              <SheetHeader className="border-b border-border/70 px-5 py-4">
-                <SheetTitle className="flex items-center gap-2.5">
+            <SheetContent side="left" className="w-[280px] bg-sidebar p-0">
+              <SheetHeader className="border-b border-sidebar-border/70 px-4 py-4">
+                <SheetTitle className="flex items-center gap-2.5 text-left">
                   <BrandMark className="size-8" />
-                  <Wordmark />
+                  <span className="min-w-0">
+                    <Wordmark />
+                    <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                      {workspace?.name ?? "Your workspace"}
+                    </span>
+                  </span>
                 </SheetTitle>
               </SheetHeader>
-              <div className="flex flex-col gap-1 py-4">
-                {sidebarNav}
-                <div className="my-2 mx-5 border-t border-border/70" />
-                <div className="px-3">
-                  <NavItem
-                    entry={settings}
-                    active={isActive(settings.to)}
-                    onNavigate={() => setMenuOpen(false)}
-                  />
-                </div>
+              <div className="flex-1 overflow-y-auto px-2.5 py-4">
+                {groupsFor(false, () => setMenuOpen(false))}
+              </div>
+              <div className="border-t border-sidebar-border/70 p-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setMenuOpen(false);
+                    await signOut();
+                    navigate("/");
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-destructive"
+                >
+                  <LogOut className="size-4" />
+                  Sign out
+                </button>
               </div>
             </SheetContent>
           </Sheet>
 
-          <span className="font-display text-lg tracking-tight md:hidden">
-            {title}
-          </span>
+          {/* Breadcrumb (desktop) / page title (mobile) */}
+          <div className="flex min-w-0 items-center gap-1.5 text-sm">
+            {group && (
+              <>
+                <span className="hidden text-muted-foreground md:inline">
+                  {group}
+                </span>
+                <ChevronRight className="hidden size-3.5 text-muted-foreground/50 md:inline" />
+              </>
+            )}
+            <span className="truncate font-medium">{title}</span>
+          </div>
 
-          {/* Search trigger */}
           <button
             type="button"
             onClick={() => setCmdOpen(true)}
-            className="ml-auto hidden items-center gap-2 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent md:flex md:w-72 lg:w-80"
+            className="ml-auto hidden items-center gap-2 rounded-lg border border-border/80 bg-card/60 px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-card md:flex md:w-64 lg:w-80"
           >
             <Search className="size-4" />
             <span className="flex-1 text-left">Search or run a command</span>
-            <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+            <kbd className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
               ⌘K
             </kbd>
           </button>
@@ -299,18 +398,20 @@ export default function AppShell({ businessType }: { businessType: string }) {
                   {userInitial}
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel className="truncate">
                   {user?.name ?? user?.email ?? "Account"}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => navigate("/app/business-profile")}
+                >
+                  <UserRound className="mr-2 size-4" />
+                  Business profile
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate("/app/settings")}>
                   <Settings className="mr-2 size-4" />
                   Settings
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate("/")}>
-                  <UserRound className="mr-2 size-4" />
-                  Landing page
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -332,41 +433,40 @@ export default function AppShell({ businessType }: { businessType: string }) {
           <Outlet />
         </main>
 
-        {/* ---------- Mobile bottom nav (spec §21) ---------- */}
-        <nav className="no-print flex shrink-0 border-t border-border/70 bg-card/90 px-2 pb-[env(safe-area-inset-bottom)] pt-1 backdrop-blur md:hidden">
+        {/* ---------- Mobile bottom nav ---------- */}
+        <nav className="no-print flex shrink-0 border-t border-border/70 bg-card/90 px-1 pb-[env(safe-area-inset-bottom)] pt-1 backdrop-blur md:hidden">
           {[
-            { key: "home", label: "Home", to: "/app", icon: Home },
-            {
-              key: "tasks",
-              label: "Tasks",
-              to: "/app/tasks",
-              icon: ListChecks,
-            },
-            {
-              key: "projects",
-              label: "Projects",
-              to: "/app/projects",
-              icon: FolderKanban,
-            },
-            { key: "inbox", label: "Inbox", to: "/app/inbox", icon: Inbox },
-            { key: "ai", label: "AI", to: "/app/ai", icon: Sparkles },
+            { key: "overview", label: "Overview", to: "/app" },
+            { key: "marketing", label: "Planner", to: "/app/marketing" },
+            { key: "tasks", label: "Tasks", to: "/app/tasks" },
+            { key: "projects", label: "Projects", to: "/app/projects" },
+            { key: "ai", label: "AI", to: "/app/ai" },
           ].map((item) => {
-            const active = isActive(item.to);
-            const Icon = item.icon;
-            const badge = item.key === "inbox" ? badges?.inbox : undefined;
+            const entry = groups
+              .flatMap((g) => g.entries)
+              .find((e) => e.key === item.key);
+            if (!entry) return null;
+            const active = isNavActive(entry, location.pathname);
+            const Icon = entry.icon;
+            const badge =
+              item.key === "tasks"
+                ? badges?.tasks
+                : item.key === "inbox"
+                  ? badges?.inbox
+                  : undefined;
             return (
               <Link
                 key={item.key}
                 to={item.to}
                 className={cn(
-                  "relative flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[11px] font-medium transition-colors",
+                  "relative flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[10.5px] font-medium transition-colors",
                   active ? "text-primary" : "text-muted-foreground",
                 )}
               >
                 <span className="relative">
                   <Icon className="size-5" />
                   {badge !== undefined && badge > 0 && (
-                    <span className="absolute -right-2 -top-1.5 size-2 rounded-full bg-ai" />
+                    <span className="absolute -right-2 -top-1 size-2 rounded-full bg-ai" />
                   )}
                 </span>
                 {item.label}
