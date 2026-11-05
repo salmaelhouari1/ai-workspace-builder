@@ -9,6 +9,7 @@ import {
   type BusinessType,
 } from "../lib/nlp";
 import { logActivity } from "./lib/activity";
+import { isMarketingPlatform } from "../lib/marketing";
 
 const BUSINESS_TYPES = [
   "freelance",
@@ -155,6 +156,7 @@ export const create = mutation({
         status: project.status ?? "active",
         priority: project.priority ?? "medium",
         deadline,
+        isSample: true,
         createdAt: now,
         updatedAt: now,
       });
@@ -171,6 +173,7 @@ export const create = mutation({
           tags: task.tags ?? [],
           reason: task.reason,
           source: "generated",
+          isSample: true,
           createdAt: now,
           updatedAt: now,
         });
@@ -187,6 +190,7 @@ export const create = mutation({
         unit: goal.unit,
         deadline: seedDayStart(goal.deadlineIn),
         status: "active",
+        isSample: true,
         createdAt: now,
         updatedAt: now,
       });
@@ -198,6 +202,7 @@ export const create = mutation({
         title: doc.title,
         content: doc.content,
         category: doc.category,
+        isSample: true,
         createdAt: now,
         updatedAt: now,
       });
@@ -215,7 +220,13 @@ export const create = mutation({
   },
 });
 
-/** Minimal profile editing from Settings. */
+/** Trim a profile field and clear it when the user empties the input. */
+function text(value: string | undefined, max: number) {
+  if (value === undefined) return undefined;
+  return value.trim().slice(0, max) || undefined;
+}
+
+/** Business Profile + basic workspace settings, saved in one mutation. */
 export const update = mutation({
   args: {
     name: v.optional(v.string()),
@@ -225,6 +236,21 @@ export const update = mutation({
     businessType: v.optional(v.string()),
     // The business description the assistant reads as context.
     prompt: v.optional(v.string()),
+    // Business Profile sections
+    industry: v.optional(v.string()),
+    website: v.optional(v.string()),
+    productsServices: v.optional(v.string()),
+    audienceDescription: v.optional(v.string()),
+    customerNeeds: v.optional(v.string()),
+    targetCustomerType: v.optional(v.string()),
+    brandVoice: v.optional(v.string()),
+    brandColors: v.optional(v.array(v.string())),
+    preferredVocabulary: v.optional(v.string()),
+    avoidWords: v.optional(v.string()),
+    brandGuidelines: v.optional(v.string()),
+    marketingGoals: v.optional(v.string()),
+    preferredPlatforms: v.optional(v.array(v.string())),
+    marketingPriorities: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { workspaceId } = await requireWorkspace(ctx);
@@ -233,12 +259,42 @@ export const update = mutation({
 
     const patch: Record<string, unknown> = {};
     if (args.name !== undefined && args.name.trim())
-      patch.name = args.name.trim();
-    if (args.mainGoal !== undefined) patch.mainGoal = args.mainGoal;
-    if (args.prompt !== undefined)
-      patch.prompt = args.prompt.trim().slice(0, 4000);
-    if (args.teamSize !== undefined) patch.teamSize = args.teamSize;
-    if (args.stage !== undefined) patch.stage = args.stage;
+      patch.name = args.name.trim().slice(0, 100);
+
+    const fields = [
+      ["mainGoal", args.mainGoal, 300],
+      ["prompt", args.prompt, 4000],
+      ["teamSize", args.teamSize, 40],
+      ["stage", args.stage, 40],
+      ["industry", args.industry, 100],
+      ["website", args.website, 300],
+      ["productsServices", args.productsServices, 1500],
+      ["audienceDescription", args.audienceDescription, 1500],
+      ["customerNeeds", args.customerNeeds, 1500],
+      ["targetCustomerType", args.targetCustomerType, 60],
+      ["brandVoice", args.brandVoice, 800],
+      ["preferredVocabulary", args.preferredVocabulary, 800],
+      ["avoidWords", args.avoidWords, 800],
+      ["brandGuidelines", args.brandGuidelines, 2500],
+      ["marketingGoals", args.marketingGoals, 1500],
+      ["marketingPriorities", args.marketingPriorities, 1500],
+    ] as const;
+    for (const [key, value, max] of fields) {
+      const next = text(value, max);
+      if (value !== undefined) patch[key] = next;
+    }
+
+    if (args.brandColors !== undefined) {
+      patch.brandColors = args.brandColors
+        .map((c) => c.trim().slice(0, 40))
+        .filter(Boolean)
+        .slice(0, 8);
+    }
+    if (args.preferredPlatforms !== undefined) {
+      patch.preferredPlatforms = Array.from(
+        new Set(args.preferredPlatforms.filter(isMarketingPlatform)),
+      ).slice(0, 10);
+    }
     if (
       args.businessType !== undefined &&
       BUSINESS_TYPES.includes(args.businessType)

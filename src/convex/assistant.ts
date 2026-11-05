@@ -64,6 +64,39 @@ function buildSnapshot(
     `WORKSPACE: ${w.name} | business type: ${w.businessType} | main goal: ${w.mainGoal ?? "not set"} | today: ${context.today}`,
   );
 
+  const p = w.profile;
+  const profileFields: Array<[string, string | null]> = [
+    ["Industry", p.industry],
+    ["Website", p.website],
+    ["Business description", p.description],
+    ["Products/services", p.productsServices],
+    ["Target audience", p.audienceDescription],
+    ["Customer needs/interests", p.customerNeeds],
+    ["Target customer type", p.targetCustomerType],
+    ["Brand voice/tone", p.brandVoice],
+    ["Brand colors", p.brandColors.length ? p.brandColors.join(", ") : null],
+    ["Preferred vocabulary", p.preferredVocabulary],
+    ["Avoid words/phrases", p.avoidWords],
+    ["Brand guidelines", p.brandGuidelines],
+    ["Marketing goals", p.marketingGoals],
+    [
+      "Preferred platforms",
+      p.preferredPlatforms.length ? p.preferredPlatforms.join(", ") : null,
+    ],
+    ["Marketing priorities", p.marketingPriorities],
+    ["Team size", p.teamSize],
+    ["Stage", p.stage],
+  ];
+  const filled = profileFields.filter(
+    (entry): entry is [string, string] => Boolean(entry[1]),
+  );
+  if (filled.length) {
+    lines.push("BUSINESS PROFILE (use this context; never invent what is missing):");
+    for (const [label, value] of filled) {
+      lines.push(`- ${label}: ${value.replace(/\n+/g, " ")}`);
+    }
+  }
+
   if (context.goals.length) {
     lines.push("GOALS:");
     for (const g of context.goals.slice(0, 8)) {
@@ -164,7 +197,7 @@ function buildSnapshot(
 
   if (context.pendingInbox) {
     lines.push(
-      `INBOX: ${context.pendingInbox} unprocessed item(s) waiting for review.`,
+      `QUICK CAPTURE: ${context.pendingInbox} unprocessed note(s) waiting for review.`,
     );
   }
 
@@ -626,6 +659,7 @@ const SYSTEM_BASE = `You are OCIVO, the AI inside an AI-native workspace for ent
 
 How to behave:
 - Answer ONLY from the WORKSPACE SNAPSHOT below. Be concrete: mention real task, project and goal names. If the data doesn't contain the answer, say what's missing instead of inventing facts.
+- When drafting content, ideas or messages, follow the BUSINESS PROFILE's voice, audience, preferred vocabulary and words to avoid. Missing profile details stay missing — never fill them with made-up facts, numbers, progress or analytics.
 - Match the user's language (if they write Spanish, reply in Spanish).
 - Keep it short and scannable: brief paragraphs, numbered lists, **bold** for names. No headings unless helpful.
 - When you refer to a workspace item, also return it in "references" copying the exact route shown in the snapshot.

@@ -209,6 +209,14 @@ export default function ProjectDetail() {
             <h1 className="font-display text-3xl tracking-tight">
               {project.name}
             </h1>
+            {project.isSample && (
+              <Badge
+                variant="outline"
+                className="text-[10px] font-medium text-muted-foreground"
+              >
+                Sample starter project
+              </Badge>
+            )}
             <select
               value={project.status}
               onChange={(e) =>

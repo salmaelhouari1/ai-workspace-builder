@@ -67,6 +67,21 @@ const schema = defineSchema(
       mainGoal: v.optional(v.string()),
       teamSize: v.optional(v.string()),
       stage: v.optional(v.string()),
+      // Business Profile — everything the AI knows about the business.
+      industry: v.optional(v.string()),
+      website: v.optional(v.string()),
+      productsServices: v.optional(v.string()),
+      audienceDescription: v.optional(v.string()),
+      customerNeeds: v.optional(v.string()),
+      targetCustomerType: v.optional(v.string()),
+      brandVoice: v.optional(v.string()),
+      brandColors: v.optional(v.array(v.string())),
+      preferredVocabulary: v.optional(v.string()),
+      avoidWords: v.optional(v.string()),
+      brandGuidelines: v.optional(v.string()),
+      marketingGoals: v.optional(v.string()),
+      preferredPlatforms: v.optional(v.array(v.string())),
+      marketingPriorities: v.optional(v.string()),
       ownerId: v.id("users"),
       // Adaptive navigation: which modules this business actually sees.
       modules: v.array(v.string()),
@@ -108,6 +123,8 @@ const schema = defineSchema(
       ),
       priority: priorityValidator,
       deadline: v.optional(v.number()),
+      // Seeded onboarding example — clearly marked in the UI, fully editable.
+      isSample: v.optional(v.boolean()),
       createdAt: v.number(),
       updatedAt: v.number(),
     })
@@ -146,6 +163,7 @@ const schema = defineSchema(
       // The AI's "why this matters now" explanation shown on Home.
       reason: v.optional(v.string()),
       source: v.optional(v.string()), // "manual" | "ai" | "inbox" | "generated"
+      isSample: v.optional(v.boolean()),
       createdAt: v.number(),
       updatedAt: v.number(),
       completedAt: v.optional(v.number()),
@@ -168,6 +186,7 @@ const schema = defineSchema(
       // total tasks across them drives the progress bar when no manual
       // current/target is set. Optional so existing goals stay valid.
       projectIds: v.optional(v.array(v.id("projects"))),
+      isSample: v.optional(v.boolean()),
       createdAt: v.number(),
       updatedAt: v.number(),
     }).index("by_workspace", ["workspaceId"]),
@@ -204,6 +223,7 @@ const schema = defineSchema(
       content: v.string(),
       category: v.string(), // "Overview", "Notes", "Processes", "Marketing"…
       projectId: v.optional(v.id("projects")),
+      isSample: v.optional(v.boolean()),
       createdAt: v.number(),
       updatedAt: v.number(),
     })

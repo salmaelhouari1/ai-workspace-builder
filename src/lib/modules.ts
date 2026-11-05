@@ -90,7 +90,7 @@ const ENTRIES: Record<string, NavEntry> = {
     label: "Calendar",
     to: ROUTES.calendar,
     icon: CalendarDays,
-    hint: "Your week across work and content",
+    hint: "Tasks, deadlines and scheduled content",
   },
   goals: {
     key: "goals",
@@ -101,7 +101,7 @@ const ENTRIES: Record<string, NavEntry> = {
   },
   inbox: {
     key: "inbox",
-    label: "Inbox",
+    label: "Quick Capture",
     to: ROUTES.inbox,
     icon: Inbox,
     badge: "inbox",

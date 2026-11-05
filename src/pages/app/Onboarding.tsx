@@ -457,6 +457,12 @@ export default function Onboarding() {
                 })}
               </ul>
 
+              <p className="mt-5 max-w-sm text-xs leading-relaxed text-muted-foreground">
+                You'll start with a few <strong className="font-semibold text-foreground">sample</strong>{" "}
+                projects, tasks, goals and docs built from your answers. They're
+                labelled "Sample" — edit or delete anything that isn't yours.
+              </p>
+
               {error && (
                 <div className="mt-6 max-w-sm rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-4 text-left">
                   <p className="flex items-start gap-2 text-sm font-medium text-destructive">

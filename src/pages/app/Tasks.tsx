@@ -414,13 +414,18 @@ export default function Tasks() {
                     <div className="min-w-0 flex-1">
                       <p
                         className={cn(
-                          "truncate text-sm",
+                          "flex min-w-0 items-center gap-1.5 text-sm",
                           done
                             ? "text-muted-foreground line-through"
                             : "text-foreground",
                         )}
                       >
-                        {task.title}
+                        <span className="truncate">{task.title}</span>
+                        {(task.isSample || task.source === "generated") && (
+                          <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground no-underline">
+                            Sample
+                          </span>
+                        )}
                       </p>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                         {task.projectName && (

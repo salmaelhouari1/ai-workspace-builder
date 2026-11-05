@@ -163,6 +163,11 @@ export default function Goals() {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-base font-semibold">{goal.title}</h2>
+                    {goal.isSample && (
+                      <span className="rounded-full border border-border px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                        Sample
+                      </span>
+                    )}
                     {goal.status === "done" && (
                       <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-medium text-primary">
                         achieved

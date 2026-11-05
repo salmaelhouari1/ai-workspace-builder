@@ -87,7 +87,7 @@ function overviewDoc(input: SeedInput, body: string): SeedDocument {
       "",
       goal ? `## Main goal\n${goal}` : "",
       input.stage ? `## Stage\n${input.stage}` : "",
-      "> [!ai] This page was written by OCIVO from what you described. Edit it freely — it's the source of truth your assistant reads.",
+      "> [!ai] This starter page was written by OCIVO from what you described. Edit it freely — it's the source of truth your assistant reads.",
     ]
       .filter(Boolean)
       .join("\n"),

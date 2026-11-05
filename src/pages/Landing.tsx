@@ -85,8 +85,8 @@ const FEATURES = [
   },
   {
     icon: Inbox,
-    title: "Smart inbox",
-    body: "Paste meeting notes or a brain dump. OCIVO splits it into tasks, notes and links for review.",
+    title: "Quick Capture",
+    body: "Paste meeting notes or a brain dump. OCIVO sorts it into tasks, notes and links for you to review.",
   },
   {
     icon: MessageSquare,

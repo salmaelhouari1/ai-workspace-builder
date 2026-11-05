@@ -104,8 +104,6 @@ export function fallbackAnswer(
   const now = Date.now();
   const today = utcDayStart(now);
   const overdue = open.filter((t) => t.dueDate !== undefined && t.dueDate < today);
-  const dueToday = open.filter((t) => t.dueDate === today);
-  const dueTomorrow = open.filter((t) => t.dueDate === today + DAY_MS);
   const refs: AssistantReference[] = [];
 
   const rank = (t: FallbackTask) => {
@@ -226,8 +224,8 @@ export function fallbackAnswer(
   if (/\binbox|\bnotes?\b|\bunprocessed\b/.test(q)) {
     return {
       answer: ctx.pendingInbox
-        ? `You have **${ctx.pendingInbox} unprocessed item${ctx.pendingInbox > 1 ? "s" : ""}** waiting in your Inbox. Review them and I'll turn the tasks into real tasks.`
-        : "Your Inbox is empty — dump anything in there (notes, links, meeting minutes) and I'll organise it.",
+        ? `You have **${ctx.pendingInbox} unprocessed item${ctx.pendingInbox > 1 ? "s" : ""}** waiting in Quick Capture. Review them and I'll turn the tasks into real tasks.`
+        : "Quick Capture is empty — add anything there (notes, links, meeting minutes) and I'll organise it.",
       references: [],
     };
   }
@@ -274,7 +272,7 @@ export function fallbackAnswer(
       `- ${ctx.projects.length} project${ctx.projects.length === 1 ? "" : "s"}\n` +
       `- ${ctx.goals.length} goal${ctx.goals.length === 1 ? "" : "s"}\n` +
       (overdue.length ? `- ⚠️ ${overdue.length} overdue\n` : "") +
-      (ctx.pendingInbox ? `- 📥 ${ctx.pendingInbox} items waiting in your Inbox\n` : "") +
+      (ctx.pendingInbox ? `- 📥 ${ctx.pendingInbox} items waiting in Quick Capture\n` : "") +
       `\nAsk me things like *"What should I do today?"*, *"Summarise my projects"* or *"Show my overdue tasks"* — or tell me to **create a project** / **add a task** and I'll prepare it for your confirmation.`,
     references: [],
   };

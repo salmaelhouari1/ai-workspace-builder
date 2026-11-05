@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -204,13 +205,23 @@ export default function DocumentEditor() {
   return (
     <div className="mx-auto w-full max-w-5xl px-4 pb-16 pt-6 md:px-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          onClick={() => navigate("/app/documents")}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-          Documents
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/app/documents")}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            Documents
+          </button>
+          {doc.isSample && (
+            <Badge
+              variant="outline"
+              className="text-[10px] font-medium text-muted-foreground"
+            >
+              Sample starter note
+            </Badge>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           {(projects?.length ?? 0) > 0 && (
             <select

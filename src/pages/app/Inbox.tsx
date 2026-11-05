@@ -111,10 +111,13 @@ export default function InboxPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 pb-12 pt-8 md:px-8">
       <header>
-        <h1 className="font-display text-3xl tracking-tight">Inbox</h1>
+        <h1 className="font-display text-3xl tracking-tight">
+          Quick Capture
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Dump notes, links, meeting minutes — OCIVO sorts them into tasks and
-          notes. You review before anything is saved.
+          A scratchpad for notes, links, meeting minutes and ideas — not a
+          messages inbox. OCIVO sorts each capture into tasks and notes, and
+          you review before anything is saved.
         </p>
       </header>
 
@@ -143,7 +146,7 @@ export default function InboxPage() {
                 void addRaw({ raw: text.trim() }).then(() => {
                   setText("");
                   setTab("pending");
-                  toast.success("Added to inbox");
+                  toast.success("Saved to Quick Capture");
                 })
               }
             >
@@ -310,7 +313,7 @@ export default function InboxPage() {
                 <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
                   <InboxIcon className="size-5" />
                 </span>
-                <p className="font-medium">Your inbox is clear</p>
+                <p className="font-medium">Quick Capture is clear</p>
                 <p className="max-w-sm text-sm text-muted-foreground">
                   Paste anything above — meeting notes, a random idea, a link —
                   and let OCIVO turn it into structure.

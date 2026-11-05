@@ -6,16 +6,20 @@ import { api } from "@/convex/_generated/api";
 import type { Doc } from "@/convex/_generated/dataModel";
 import { DAY_MS, relativeDayLabel, utcDayStart } from "@/lib/nlp";
 import { cn } from "@/lib/utils";
+import { marketingPlatformLabel } from "@/lib/marketing";
 import {
+  ArrowUpRight,
   Check,
   ChevronLeft,
   ChevronRight,
   FileDown,
+  Megaphone,
   Plus,
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -43,7 +47,12 @@ function monthIndex(ts: number): number {
 }
 
 export default function CalendarPage() {
+  const navigate = useNavigate();
   const tasks = useQuery(api.tasks.list);
+  // The same post and project records the planner and projects pages use —
+  // the calendar never copies them, it only places them on their date.
+  const entries = useQuery(api.marketing.list);
+  const projects = useQuery(api.projects.list);
   const createTask = useMutation(api.tasks.create);
   const toggleTask = useMutation(api.tasks.toggle);
 
@@ -111,6 +120,42 @@ export default function CalendarPage() {
       };
     }, [tasks, start, end]);
 
+  const postsByDay = useMemo(() => {
+    const map = new Map<number, NonNullable<typeof entries>>();
+    for (const entry of entries ?? []) {
+      if (entry.scheduledAt == null) continue;
+      const day = utcDayStart(entry.scheduledAt);
+      if (day < start || day >= end) continue;
+      const arr = map.get(day) ?? [];
+      arr.push(entry);
+      map.set(day, arr);
+    }
+    return map;
+  }, [entries, start, end]);
+
+  const deadlinesByDay = useMemo(() => {
+    const map = new Map<number, NonNullable<typeof projects>>();
+    for (const project of projects ?? []) {
+      if (project.deadline === undefined) continue;
+      const day = utcDayStart(project.deadline);
+      if (day < start || day >= end) continue;
+      const arr = map.get(day) ?? [];
+      arr.push(project);
+      map.set(day, arr);
+    }
+    return map;
+  }, [projects, start, end]);
+
+  const postCount = useMemo(
+    () => [...postsByDay.values()].reduce((sum, list) => sum + list.length, 0),
+    [postsByDay],
+  );
+  const deadlineCount = useMemo(
+    () =>
+      [...deadlinesByDay.values()].reduce((sum, list) => sum + list.length, 0),
+    [deadlinesByDay],
+  );
+
   // Monday-first grid, UTC-consistent with the rest of the app.
   const leading = (new Date(start).getUTCDay() + 6) % 7;
   const daysInMonth = new Date(end - DAY_MS).getUTCDate();
@@ -166,12 +211,15 @@ export default function CalendarPage() {
 
   const dayTasks = selected !== null ? (byDay.get(selected) ?? []) : [];
   const dayDone = selected !== null ? (doneByDay.get(selected) ?? []) : [];
+  const dayPosts = selected !== null ? (postsByDay.get(selected) ?? []) : [];
+  const dayDeadlines =
+    selected !== null ? (deadlinesByDay.get(selected) ?? []) : [];
 
   const subtitle =
     tasks === undefined
       ? "Loading…"
       : view === "plan"
-        ? `${openCount} open · ${dueDoneCount} done · ${
+        ? `${openCount} open task${openCount === 1 ? "" : "s"} · ${dueDoneCount} done · ${postCount} scheduled post${postCount === 1 ? "" : "s"} · ${deadlineCount} deadline${deadlineCount === 1 ? "" : "s"} · ${
             offset === -1
               ? "last month"
               : offset === 1
@@ -204,6 +252,10 @@ export default function CalendarPage() {
             )}
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+          <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+            Tasks, project deadlines and scheduled posts in one view. Edit a
+            post in the Marketing Planner — the calendar reads the same record.
+          </p>
         </div>
 
         <div className="no-print flex items-center gap-2">
@@ -272,6 +324,13 @@ export default function CalendarPage() {
               <span className="flex items-center gap-1.5">
                 <Check className="size-3 text-moss" /> done
               </span>
+              <span className="flex items-center gap-1.5">
+                <Megaphone className="size-3 text-ai-deep" /> scheduled post
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-foreground/40" /> project
+                deadline
+              </span>
             </>
           ) : (
             <span className="flex items-center gap-1.5">
@@ -286,9 +345,10 @@ export default function CalendarPage() {
 
       {view === "plan" && selected === null && (
         <p className="no-print mt-2 text-xs text-muted-foreground">
-          Click any day to draft tasks for it — hit › to plan next month, or
-          switch to <span className="font-medium text-foreground">Done</span> to
-          review what got finished.
+          Click any day to see its tasks, scheduled content and deadlines, or
+          to draft a new task. Hit › to look ahead, or switch to{" "}
+          <span className="font-medium text-foreground">Done</span> to review
+          what got finished.
         </p>
       )}
 
@@ -323,7 +383,31 @@ export default function CalendarPage() {
                 view === "plan"
                   ? (byDay.get(cell) ?? [])
                   : (doneByDay.get(cell) ?? []);
-              const count = dayTasks_.length;
+              const dayPosts_ =
+                view === "plan" ? (postsByDay.get(cell) ?? []) : [];
+              const dayDeadlines_ =
+                view === "plan" ? (deadlinesByDay.get(cell) ?? []) : [];
+              const cellItems = [
+                ...dayTasks_.map((t) => ({
+                  id: t._id as string,
+                  kind: "task" as const,
+                  label: t.title,
+                  done: view === "done" || t.status === "done",
+                })),
+                ...dayPosts_.map((e) => ({
+                  id: e._id as string,
+                  kind: "post" as const,
+                  label: e.title,
+                  done: false,
+                })),
+                ...dayDeadlines_.map((p) => ({
+                  id: p._id as string,
+                  kind: "deadline" as const,
+                  label: `Deadline: ${p.name}`,
+                  done: false,
+                })),
+              ];
+              const count = cellItems.length;
               const isToday = cell === today;
               const isSelected = cell === selected;
               const clickable = !outOfMonth;
@@ -374,34 +458,42 @@ export default function CalendarPage() {
 
                   {count > 0 && (
                     <div className="hidden w-full flex-col gap-1 md:flex">
-                      {dayTasks_.slice(0, 3).map((t) => {
-                        const done = view === "done" || t.status === "done";
-                        return (
-                          <span
-                            key={t._id}
-                            className={cn(
-                              "flex w-full items-center gap-1 rounded px-1 py-0.5 text-[11px] leading-tight",
-                              done
+                      {cellItems.slice(0, 3).map((item) => (
+                        <span
+                          key={`${item.kind}-${item.id}`}
+                          className={cn(
+                            "flex w-full items-center gap-1 rounded px-1 py-0.5 text-[11px] leading-tight",
+                            item.kind === "post"
+                              ? "bg-ai/10 text-foreground"
+                              : item.done
                                 ? "bg-muted text-muted-foreground"
-                                : "bg-primary/8 text-foreground",
+                                : item.kind === "deadline"
+                                  ? "bg-muted text-muted-foreground"
+                                  : "bg-primary/8 text-foreground",
+                          )}
+                        >
+                          {item.kind === "post" ? (
+                            <Megaphone className="size-3 shrink-0 text-ai-deep" />
+                          ) : item.kind === "deadline" ? (
+                            <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
+                          ) : item.done ? (
+                            <Check className="size-3 shrink-0 text-moss" />
+                          ) : (
+                            <span className="size-1.5 shrink-0 rounded-full bg-primary/60" />
+                          )}
+                          <span
+                            className={cn(
+                              "truncate",
+                              item.done && "line-through",
                             )}
                           >
-                            {done ? (
-                              <Check className="size-3 shrink-0 text-moss" />
-                            ) : (
-                              <span className="size-1.5 shrink-0 rounded-full bg-primary/60" />
-                            )}
-                            <span
-                              className={cn("truncate", done && "line-through")}
-                            >
-                              {t.title}
-                            </span>
+                            {item.label}
                           </span>
-                        );
-                      })}
-                      {dayTasks_.length > 3 && (
+                        </span>
+                      ))}
+                      {count > 3 && (
                         <span className="px-1 text-[10px] text-muted-foreground">
-                          +{dayTasks_.length - 3} more
+                          +{count - 3} more
                         </span>
                       )}
                     </div>
@@ -455,6 +547,56 @@ export default function CalendarPage() {
               <X className="size-4" />
             </Button>
           </div>
+
+          {view === "plan" && dayPosts.length > 0 && (
+            <div className="mt-3 rounded-xl border border-ai/25 bg-ai/5 px-3 py-2.5">
+              <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ai-deep">
+                <Megaphone className="size-3.5" /> Scheduled content
+              </p>
+              <ul className="mt-1.5 divide-y divide-border/40">
+                {dayPosts.map((entry) => (
+                  <li key={entry._id}>
+                    <button
+                      type="button"
+                      onClick={() => navigate("/app/marketing")}
+                      className="flex w-full items-center gap-2 py-1.5 text-left text-sm hover:text-primary"
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        {entry.title}
+                      </span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {marketingPlatformLabel(entry.platform)} ·{" "}
+                        {entry.status === "planned"
+                          ? "Scheduled"
+                          : entry.status}
+                      </span>
+                      <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {view === "plan" && dayDeadlines.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {dayDeadlines.map((project) => (
+                <li key={project._id}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/app/projects/${project._id}`)}
+                    className="flex w-full items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-left text-sm hover:text-primary"
+                  >
+                    <span className="size-1.5 shrink-0 rounded-full bg-foreground/40" />
+                    <span className="min-w-0 flex-1 truncate">
+                      Project deadline · {project.name}
+                    </span>
+                    <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {view === "plan" && (
             <form

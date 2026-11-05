@@ -139,9 +139,19 @@ export default function Projects() {
               className="group rounded-2xl border border-border/70 bg-card p-5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
             >
               <div className="flex items-start justify-between gap-3">
-                <h2 className="text-base font-semibold leading-snug group-hover:text-primary">
-                  {project.name}
-                </h2>
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <h2 className="text-base font-semibold leading-snug group-hover:text-primary">
+                    {project.name}
+                  </h2>
+                  {project.isSample && (
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 text-[10px] font-medium text-muted-foreground"
+                    >
+                      Sample
+                    </Badge>
+                  )}
+                </div>
                 <Badge
                   className={cn(
                     "shrink-0 border-0 font-medium",

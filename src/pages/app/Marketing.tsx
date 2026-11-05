@@ -988,9 +988,10 @@ export default function Marketing() {
           <h1 className="font-display text-3xl tracking-tight">
             Marketing Planner
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Turn your marketing ideas into an organized plan you can actually
-            execute.
+          <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+            Create and edit content ideas, posts, statuses and campaigns here.
+            Anything with a date also appears on the Calendar — same record,
+            no duplicate.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

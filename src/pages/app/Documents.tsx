@@ -118,6 +118,14 @@ export default function Documents() {
                       <h3 className="min-w-0 flex-1 truncate text-sm font-semibold group-hover:text-primary">
                         {doc.title}
                       </h3>
+                      {doc.isSample && (
+                        <Badge
+                          variant="outline"
+                          className="shrink-0 text-[10px] text-muted-foreground"
+                        >
+                          Sample
+                        </Badge>
+                      )}
                     </div>
                     <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
                       {doc.content
