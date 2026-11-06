@@ -2,14 +2,16 @@
  * Application navigation.
  *
  * The sidebar is grouped the way the workspace is used: day-to-day work under
- * WORKSPACE, the material you refer back to under RESOURCES, the assistant on
- * its own, and configuration last. Calendar, goals and the inbox stay in the
- * workspace group because they are working tools, not settings.
+ * WORKSPACE, the material you refer back to under RESOURCES, performance and
+ * the assistant under INTELLIGENCE, and configuration last. Calendar, goals and
+ * the inbox stay in the workspace group because they are working tools, not
+ * settings.
  */
 
 import {
   Building2,
   CalendarDays,
+  ChartNoAxesCombined,
   FileText,
   FolderKanban,
   Home,
@@ -50,6 +52,7 @@ export const ROUTES = {
   inbox: "/app/inbox",
   documents: "/app/documents",
   businessProfile: "/app/business-profile",
+  intelligence: "/app/intelligence",
   ai: "/app/ai",
   settings: "/app/settings",
 } as const;
@@ -122,6 +125,13 @@ const ENTRIES: Record<string, NavEntry> = {
     icon: Building2,
     hint: "What OCIVO knows about your business",
   },
+  intelligence: {
+    key: "intelligence",
+    label: "Intelligence",
+    to: ROUTES.intelligence,
+    icon: ChartNoAxesCombined,
+    hint: "Real performance, insights and reports",
+  },
   ai: {
     key: "ai",
     label: "AI Assistant",
@@ -161,7 +171,7 @@ export function navGroups(): NavGroup[] {
     {
       key: "intelligence",
       label: "Intelligence",
-      entries: [ENTRIES.ai],
+      entries: [ENTRIES.intelligence, ENTRIES.ai],
     },
     {
       key: "preferences",

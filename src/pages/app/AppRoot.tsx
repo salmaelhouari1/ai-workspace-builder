@@ -11,6 +11,7 @@ import Documents from "./Documents";
 import Goals from "./Goals";
 import Home from "./Home";
 import InboxPage from "./Inbox";
+import Intelligence from "./Intelligence";
 import Marketing from "./Marketing";
 import ProjectDetail from "./ProjectDetail";
 import Projects from "./Projects";
@@ -57,6 +58,7 @@ export default function AppRoot() {
         <Route path="business-profile" element={<BusinessProfile />} />
         <Route path="goals" element={<Goals />} />
         <Route path="marketing" element={<Marketing />} />
+        <Route path="intelligence" element={<Intelligence />} />
         <Route path="ai" element={<Assistant />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/app" replace />} />
