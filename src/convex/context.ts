@@ -2,6 +2,11 @@ import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { currentUserWorkspace } from "./lib/auth";
 import { relativeDayPhrase, utcDayStart } from "../lib/nlp";
+import { buildAnalyticsSnapshot } from "./lib/analyticsData";
+import {
+  buildMetricChanges,
+  EMPTY_PERIOD_METRICS,
+} from "../lib/analytics";
 
 /**
  * Contextual retrieval for the assistant (spec §24).
@@ -63,6 +68,7 @@ export const workspaceContext = query({
           .take(60),
       ]);
 
+    const analytics = await buildAnalyticsSnapshot(ctx, workspaceId, "30d");
     const now = Date.now();
     const today = utcDayStart(now);
     const projectName = new Map(projects.map((p) => [p._id, p.name]));
@@ -231,6 +237,44 @@ export const workspaceContext = query({
         entries: entryItems,
         ideas: ideaItems,
       },
+      analytics: analytics
+        ? {
+            connected: true,
+            periodLabel: analytics.period.label,
+            periodStart: analytics.period.start,
+            periodEnd: analytics.period.end,
+            dataFreshnessAt: analytics.connection.dataFreshnessAt,
+            metrics: analytics.period.metrics,
+            previous: analytics.period.previous,
+            changes: analytics.period.changes,
+            formats: analytics.media.formats,
+            topContent: analytics.media.top.slice(0, 5).map((item) => ({
+              title: item.caption?.slice(0, 120) ?? "Untitled post",
+              reach: item.reach,
+              views: item.views,
+              interactions: item.interactions,
+              format: item.mediaProductType ?? item.mediaType,
+            })),
+            audience: analytics.audience,
+            dataGaps: analytics.dataGaps,
+          }
+        : {
+            connected: false,
+            periodLabel: "No Instagram account connected",
+            periodStart: null,
+            periodEnd: null,
+            dataFreshnessAt: null,
+            metrics: EMPTY_PERIOD_METRICS,
+            previous: EMPTY_PERIOD_METRICS,
+            changes: buildMetricChanges(
+              EMPTY_PERIOD_METRICS,
+              EMPTY_PERIOD_METRICS,
+            ),
+            formats: [],
+            topContent: [],
+            audience: { country: [], age: [], gender: [] },
+            dataGaps: ["No Instagram account is connected."],
+          },
       workspace: {
         id: workspaceId as string,
         name: workspace?.name ?? "Workspace",

@@ -375,6 +375,279 @@ const schema = defineSchema(
       createdAt: v.number(),
       updatedAt: v.number(),
     }).index("by_workspace", ["workspaceId"]),
+
+    // ------------------------------------------------------------------
+    // Marketing intelligence — additive, provider-agnostic.
+    // Access tokens only ever live here as ciphertext. Public queries return
+    // a sanitized connection object and never this row.
+    // ------------------------------------------------------------------
+
+    integrationConnections: defineTable({
+      workspaceId: v.id("workspaces"),
+      provider: v.string(), // "instagram" first; future providers use the same row shape
+      providerAccountId: v.string(),
+      // App-scoped ID returned by /me. Meta deauthorization/deletion
+      // callbacks may identify the user with this value instead.
+      appScopedUserId: v.optional(v.string()),
+      username: v.optional(v.string()),
+      accountType: v.optional(v.string()),
+      profilePictureUrl: v.optional(v.string()),
+      accessTokenCiphertext: v.optional(v.string()),
+      tokenExpiresAt: v.optional(v.number()),
+      scopes: v.array(v.string()),
+      status: v.union(
+        v.literal("connected"),
+        v.literal("needsReauth"),
+        v.literal("error"),
+        v.literal("disconnected"),
+      ),
+      statusMessage: v.optional(v.string()),
+      connectedBy: v.id("users"),
+      connectedAt: v.number(),
+      lastSyncedAt: v.optional(v.number()),
+      lastSyncStatus: v.optional(
+        v.union(
+          v.literal("running"),
+          v.literal("success"),
+          v.literal("partial"),
+          v.literal("error"),
+        ),
+      ),
+      lastSyncError: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_workspace", ["workspaceId"])
+      .index("by_workspace_provider", ["workspaceId", "provider"])
+      .index("by_provider_account", ["provider", "providerAccountId"])
+      .index("by_provider_app_scoped", ["provider", "appScopedUserId"])
+      .index("by_status", ["status"]),
+
+    integrationOAuthStates: defineTable({
+      workspaceId: v.id("workspaces"),
+      userId: v.id("users"),
+      provider: v.string(),
+      // Only a SHA-256 hash of the state leaves the action.
+      stateHash: v.string(),
+      expiresAt: v.number(),
+      usedAt: v.optional(v.number()),
+      createdAt: v.number(),
+    })
+      .index("by_state_hash", ["stateHash"])
+      .index("by_workspace", ["workspaceId"]),
+
+    analyticsAccountDaily: defineTable({
+      workspaceId: v.id("workspaces"),
+      connectionId: v.id("integrationConnections"),
+      provider: v.string(),
+      date: v.string(), // UTC YYYY-MM-DD
+      followers: v.union(v.number(), v.null()),
+      reach: v.union(v.number(), v.null()),
+      views: v.union(v.number(), v.null()),
+      interactions: v.union(v.number(), v.null()),
+      accountsEngaged: v.union(v.number(), v.null()),
+      profileVisits: v.union(v.number(), v.null()),
+      follows: v.union(v.number(), v.null()),
+      unfollows: v.union(v.number(), v.null()),
+      mediaCount: v.union(v.number(), v.null()),
+      capturedAt: v.number(),
+    })
+      .index("by_workspace_date", ["workspaceId", "date"])
+      .index("by_connection_date", ["connectionId", "date"]),
+
+    analyticsPeriods: defineTable({
+      workspaceId: v.id("workspaces"),
+      connectionId: v.id("integrationConnections"),
+      provider: v.string(),
+      periodKey: v.string(), // "7d" | "30d" | "90d"
+      window: v.union(v.literal("current"), v.literal("previous")),
+      periodStart: v.number(),
+      periodEnd: v.number(),
+      capturedAt: v.number(),
+      reach: v.union(v.number(), v.null()),
+      views: v.union(v.number(), v.null()),
+      interactions: v.union(v.number(), v.null()),
+      accountsEngaged: v.union(v.number(), v.null()),
+      profileVisits: v.union(v.number(), v.null()),
+      follows: v.union(v.number(), v.null()),
+      unfollows: v.union(v.number(), v.null()),
+      followerChange: v.union(v.number(), v.null()),
+      followersEnd: v.union(v.number(), v.null()),
+      mediaCount: v.union(v.number(), v.null()),
+    })
+      .index("by_workspace_period", ["workspaceId", "periodKey"])
+      .index("by_connection_period", ["connectionId", "periodKey", "window"]),
+
+    analyticsMedia: defineTable({
+      workspaceId: v.id("workspaces"),
+      connectionId: v.id("integrationConnections"),
+      provider: v.string(),
+      mediaId: v.string(),
+      mediaType: v.string(),
+      mediaProductType: v.optional(v.string()),
+      caption: v.optional(v.string()),
+      permalink: v.optional(v.string()),
+      thumbnailUrl: v.optional(v.string()),
+      timestamp: v.number(),
+      likeCount: v.union(v.number(), v.null()),
+      commentsCount: v.union(v.number(), v.null()),
+      reach: v.union(v.number(), v.null()),
+      views: v.union(v.number(), v.null()),
+      saves: v.union(v.number(), v.null()),
+      shares: v.union(v.number(), v.null()),
+      profileVisits: v.union(v.number(), v.null()),
+      follows: v.union(v.number(), v.null()),
+      interactions: v.union(v.number(), v.null()),
+      capturedAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_workspace_timestamp", ["workspaceId", "timestamp"])
+      .index("by_connection_media", ["connectionId", "mediaId"]),
+
+    analyticsContentLinks: defineTable({
+      workspaceId: v.id("workspaces"),
+      connectionId: v.id("integrationConnections"),
+      mediaId: v.id("analyticsMedia"),
+      marketingEntryId: v.id("marketingEntries"),
+      matchSource: v.union(v.literal("manual"), v.literal("suggested")),
+      confidence: v.optional(v.number()),
+      linkedBy: v.id("users"),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+    })
+      .index("by_workspace", ["workspaceId"])
+      .index("by_workspace_entry", ["workspaceId", "marketingEntryId"])
+      .index("by_media", ["mediaId"]),
+
+    analyticsSyncRuns: defineTable({
+      workspaceId: v.id("workspaces"),
+      connectionId: v.id("integrationConnections"),
+      provider: v.string(),
+      trigger: v.union(
+        v.literal("initial"),
+        v.literal("manual"),
+        v.literal("scheduled"),
+        v.literal("reconnect"),
+      ),
+      status: v.union(
+        v.literal("running"),
+        v.literal("success"),
+        v.literal("partial"),
+        v.literal("error"),
+      ),
+      startedAt: v.number(),
+      finishedAt: v.optional(v.number()),
+      metricsStored: v.optional(v.number()),
+      error: v.optional(v.string()),
+      createdAt: v.number(),
+    })
+      .index("by_workspace_started", ["workspaceId", "startedAt"])
+      .index("by_connection_started", ["connectionId", "startedAt"]),
+
+    analyticsAudience: defineTable({
+      workspaceId: v.id("workspaces"),
+      connectionId: v.id("integrationConnections"),
+      provider: v.string(),
+      capturedAt: v.number(),
+      timeframe: v.string(),
+      breakdown: v.union(
+        v.literal("age"),
+        v.literal("country"),
+        v.literal("gender"),
+        v.literal("city"),
+      ),
+      values: v.array(
+        v.object({
+          label: v.string(),
+          value: v.number(),
+        }),
+      ),
+    })
+      .index("by_workspace_captured", ["workspaceId", "capturedAt"])
+      .index("by_connection", ["connectionId"]),
+
+    intelligenceReports: defineTable({
+      workspaceId: v.id("workspaces"),
+      connectionId: v.id("integrationConnections"),
+      reportType: v.union(
+        v.literal("weekly"),
+        v.literal("monthly"),
+        v.literal("content"),
+        v.literal("audience"),
+        v.literal("improvement"),
+      ),
+      periodKey: v.string(),
+      title: v.string(),
+      periodStart: v.number(),
+      periodEnd: v.number(),
+      dataFreshnessAt: v.number(),
+      snapshot: v.string(),
+      snapshotHash: v.string(),
+      content: v.string(),
+      source: v.union(v.literal("ai"), v.literal("deterministic")),
+      generatedBy: v.id("users"),
+      createdAt: v.number(),
+    })
+      .index("by_workspace_created", ["workspaceId", "createdAt"])
+      .index("by_workspace_type", ["workspaceId", "reportType"]),
+
+    intelligenceInsights: defineTable({
+      workspaceId: v.id("workspaces"),
+      connectionId: v.id("integrationConnections"),
+      reportId: v.optional(v.id("intelligenceReports")),
+      periodKey: v.string(),
+      kind: v.union(
+        v.literal("observation"),
+        v.literal("interpretation"),
+        v.literal("opportunity"),
+        v.literal("recommendation"),
+        v.literal("limitation"),
+      ),
+      title: v.string(),
+      body: v.string(),
+      evidence: v.string(),
+      confidence: v.optional(
+        v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+      ),
+      createdAt: v.number(),
+    }).index("by_workspace_created", ["workspaceId", "createdAt"]),
+
+    intelligenceRecommendations: defineTable({
+      workspaceId: v.id("workspaces"),
+      connectionId: v.id("integrationConnections"),
+      periodKey: v.string(),
+      fingerprint: v.string(),
+      title: v.string(),
+      explanation: v.string(),
+      evidence: v.array(
+        v.object({
+          label: v.string(),
+          value: v.string(),
+        }),
+      ),
+      confidence: v.union(
+        v.literal("low"),
+        v.literal("medium"),
+        v.literal("high"),
+      ),
+      suggestedAction: v.string(),
+      // Always framed as a hypothesis, never a guaranteed outcome.
+      potentialBenefit: v.string(),
+      status: v.union(
+        v.literal("new"),
+        v.literal("saved"),
+        v.literal("dismissed"),
+        v.literal("actioned"),
+      ),
+      source: v.union(v.literal("ai"), v.literal("deterministic")),
+      actionRoute: v.optional(v.string()),
+      createdAt: v.number(),
+      updatedAt: v.number(),
+      actionedAt: v.optional(v.number()),
+    })
+      .index("by_workspace_status", ["workspaceId", "status"])
+      .index("by_workspace_created", ["workspaceId", "createdAt"])
+      .index("by_workspace_fingerprint", ["workspaceId", "fingerprint"]),
   },
   {
     schemaValidation: false,

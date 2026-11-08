@@ -18,6 +18,7 @@ const blocks: LegalBlock[] = [
       "A display name, if you choose to provide one; your workspace's business name, business type, main goal, team size and stage, which you enter during onboarding or in Settings.",
       "The workplace content you create: business descriptions, tasks, projects, documents, goals, inbox entries, task assignments, comments and notes.",
       "The prompts and questions you type to the OCIVO AI assistant, and the messages of your AI conversations.",
+      "If you connect an Instagram professional account: your Instagram user ID, username, account type and profile picture; media captions, links, thumbnails, timestamps and public like/comment counts; account and media insights (such as reach, views, interactions, follower counts and available audience demographics); synchronization status and errors; and the encrypted access token required to read that data.",
       "Consent records: the choices you make in the cookie banner and the version of the Terms you accepted, stored locally in your browser and (for Terms acceptance) in your account record.",
     ],
   },
@@ -25,6 +26,7 @@ const blocks: LegalBlock[] = [
     heading: "3. What we do NOT collect",
     paragraphs: [
       "OCIVO does not include advertising, marketing analytics or cross-site tracking. No analytics or advertising cookies are installed in the application, and the Service does not profile you across other websites. OCIVO does not knowingly add any tool of that kind to the product; if one is ever introduced, the Cookie Policy and the consent banner will document it first.",
+      "OCIVO does not scrape Instagram, does not request publishing, messaging or comment-management permissions, and does not receive Instagram passwords. The integration is read-only and uses Meta's official Instagram API with Instagram Login.",
       "Please do not submit sensitive personal data — health information, government identifiers, payment card numbers, special-category data — into the workspace or the AI assistant unless the product is explicitly designed and authorized to handle that category of data. OCIVO is a general-purpose business workspace and is not designed to manage such data.",
     ],
   },
@@ -50,6 +52,7 @@ const blocks: LegalBlock[] = [
     heading: "6. AI features and your content",
     paragraphs: [
       "The OCIVO AI assistant and inbox features send parts of your workspace content — and the prompts you write — to third-party AI inference providers so the assistant can answer and organize your work. Messages are exchanged through the platform's managed AI gateway.",
+      "If Instagram analytics are connected, report generation and analytics questions send a normalized performance snapshot and relevant business context to the AI provider. The snapshot contains calculated metrics, content captions and available audience breakdowns, but never the Instagram access token or app secret. AI observations are stored with the report and the snapshot hash used to generate them.",
       "We do not intentionally use your workspace content to train AI models. Underlying model providers may, under their own published terms, retain prompts and completions for abuse monitoring or other purposes. The list of AI sub-processors, their identities, their processing locations, and a link to the current provider terms are maintained in this document as a placeholder until verified:",
       "{AI_SUBPROCESSORS}",
     ],
@@ -62,6 +65,7 @@ const blocks: LegalBlock[] = [
     list: [
       "The platform that hosts and operates the application (hosting, managed database and user authentication infrastructure).",
       "The platform's integration gateway, which relays one-time sign-in code emails and AI model traffic.",
+      "Meta Platforms, when you choose to connect Instagram, for the official read-only Instagram API and its OAuth, deauthorization and data-deletion callbacks.",
       "Third-party AI inference providers reached through the gateway.",
     ],
   },
@@ -75,12 +79,13 @@ const blocks: LegalBlock[] = [
     heading: "9. Retention, account deletion and backups",
     paragraphs: [
       "You can delete your account and your entire workspace at any time in Settings. Deletion is immediate and irreversible; what is removed is described on the Data Deletion page. See that page — and the placeholder below — for how long provider backups keep copies.",
+      "Disconnecting Instagram removes the access token and stops new collection; stored analytics are retained by default so you do not lose history. You can explicitly delete stored Instagram analytics in Settings. Account deletion removes the connection, token, analytics, reports, recommendations and synchronization records. Meta data-deletion callbacks for the connected account hard-delete that provider's stored data.",
     ],
   },
   {
     heading: "10. Security",
     paragraphs: [
-      "Accounts are protected by one-time email codes. Workspace data is scoped to your workspace with authorization checks on the backend, and secrets are kept out of the browser. We apply reasonable measures appropriate to the risk — but no Internet service can be guaranteed perfectly secure, and nothing in this policy promises absolute security. If you report a suspected vulnerability or account problem, we will investigate promptly.",
+      "Accounts are protected by one-time email codes. Workspace data is scoped to your workspace with authorization checks on the backend, and secrets are kept out of the browser. Instagram access tokens are encrypted at rest with AES-GCM and only decrypted server-side for a sync; OAuth states are single-use, expiring hashes. We apply reasonable measures appropriate to the risk — but no Internet service can be guaranteed perfectly secure, and nothing in this policy promises absolute security. If you report a suspected vulnerability or account problem, we will investigate promptly.",
     ],
   },
   {

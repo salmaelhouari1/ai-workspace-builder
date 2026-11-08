@@ -195,6 +195,66 @@ function buildSnapshot(
     }
   }
 
+  if (context.analytics.connected && "metrics" in context.analytics) {
+    const a = context.analytics;
+    const metric = (value: number | null) =>
+      value === null ? "Unavailable" : new Intl.NumberFormat("en-US").format(value);
+    lines.push(
+      `INSTAGRAM ANALYTICS (${a.periodLabel}, data as of ${a.dataFreshnessAt ? new Date(a.dataFreshnessAt).toISOString() : "never"}):`,
+    );
+    lines.push(
+      `- Reach: ${metric(a.metrics.reach)} | Views: ${metric(a.metrics.views)} | Interactions: ${metric(a.metrics.interactions)} | Accounts engaged: ${metric(a.metrics.accountsEngaged)}`,
+    );
+    lines.push(
+      `- Followers: ${metric(a.metrics.followers)} | Follower change: ${metric(a.metrics.followerChange)} | Published media: ${metric(a.metrics.mediaCount)}`,
+    );
+    const changed = (
+      Object.entries(a.changes) as Array<
+        [string, { absolute: number | null; percent: number | null }]
+      >
+    ).filter(([, change]) => change.percent !== null);
+    if (changed.length) {
+      lines.push(
+        "- Period-over-period: " +
+          changed
+            .map(
+              ([key, change]) =>
+                `${key} ${change.percent! > 0 ? "+" : ""}${change.percent!.toFixed(1)}%`,
+            )
+            .join(", "),
+      );
+    } else {
+      lines.push("- Period-over-period changes: no comparable previous period.");
+    }
+    if (a.formats.length) {
+      lines.push(
+        "- Content formats: " +
+          a.formats
+            .map(
+              (format) =>
+                `${format.label} ${format.count} post(s), avg reach ${metric(format.avgReach)}, avg interactions ${metric(format.avgInteractions)}`,
+            )
+            .join("; "),
+      );
+    }
+    if (a.topContent.length) {
+      lines.push("- Top content:");
+      for (const item of a.topContent) {
+        lines.push(
+          `  - "${item.title}" | ${item.format} | reach ${metric(item.reach)} | views ${metric(item.views)} | interactions ${metric(item.interactions)}`,
+        );
+      }
+    }
+    if (a.dataGaps.length) {
+      lines.push(`- Data gaps: ${a.dataGaps.join(" ")}`);
+    }
+    lines.push("- Analytics route: /app/intelligence");
+  } else {
+    lines.push(
+      "INSTAGRAM ANALYTICS: no account is connected. Do not invent performance numbers or imply that social data exists.",
+    );
+  }
+
   if (context.pendingInbox) {
     lines.push(
       `QUICK CAPTURE: ${context.pendingInbox} unprocessed note(s) waiting for review.`,
@@ -666,6 +726,13 @@ How to behave:
 - If the user asks you to CREATE, UPDATE, ORGANISE, PLAN or CONVERT something structural, do NOT pretend it exists yet. Set "proposal" to ONE proposal object and say you've prepared it for confirmation.
 - Never propose deleting data, and never propose changes you weren't asked for.
 - Dates in proposals use "YYYY-MM-DD" (today is in the snapshot). If a task's due date should be cleared, use "due": null.
+
+ANALYTICS (Instagram read-only integration):
+- The INSTAGRAM ANALYTICS section is calculated by OCIVO, not by you. Use those exact values and never recalculate unique reach by summing daily reach.
+- Treat null/Unavailable as "we don't know". Never turn a missing metric into zero.
+- Social engagement is not proof of sales, revenue, orders or causation. Say what the data supports and name the limitation.
+- When asked which content performed best, use the measured Top content list. When asked what to publish next, tie suggestions to the business goal and measured formats, and label the expected benefit as a hypothesis.
+- If analytics are not connected, say so instead of inventing a dashboard.
 
 MARKETING PLANNER (planning only — nothing is ever published or emailed):
 - It stores campaigns, content items and content ideas. Channels: instagram, tiktok, linkedin, facebook, pinterest, email, other. An "email" item is a planned email/newsletter.

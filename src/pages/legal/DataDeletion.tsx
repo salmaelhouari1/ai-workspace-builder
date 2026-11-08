@@ -8,26 +8,33 @@ const blocks: LegalBlock[] = [
       "Self-service deletion is built in. Open Settings in your workspace, scroll to the Danger zone, type your workspace name exactly as prompted, and confirm. That immediately does the following:",
     ],
     list: [
-      "Deletes the whole workspace — with all projects, tasks, goals, documents, inbox entries, AI conversations, activity logs, team roster and activity history — if you are the workspace owner.",
+      "Deletes the whole workspace — with all projects, tasks, goals, documents, inbox entries, AI conversations, activity logs, team roster, marketing plans, connected integration tokens, Instagram analytics, reports and recommendations — if you are the workspace owner.",
       "Deletes your membership row if you belong to someone else's workspace (their data remains untouched).",
       "Deletes your account credentials: active sessions, refresh tokens, sign-in records and the user record itself. You will not be able to sign in again with this email to the same account.",
     ],
   },
   {
-    heading: "2. Request deletion instead",
+    heading: "2. Instagram data, disconnect and analytics deletion",
+    paragraphs: [
+      "The workspace owner controls the Instagram connection in Settings → Integrations. Disconnecting removes the stored access token and stops new collection, but keeps analytics history by default. A separate “Delete stored analytics” action permanently removes Instagram daily metrics, period snapshots, media, planner links, audience snapshots, reports, insights and recommendations while keeping the connection itself.",
+      "Account deletion removes the Instagram connection, encrypted token, analytics and all derived reports and recommendations. If Meta sends a data-deletion callback for the connected account, OCIVO hard-deletes that provider account's stored connection and analytics. A deauthorization callback revokes the token and marks the connection disconnected while retaining history under this policy.",
+    ],
+  },
+  {
+    heading: "3. Request deletion instead",
     paragraphs: [
       `If you cannot use the self-service flow — you lost access, you were removed from a workspace and want your copy of data deleted, or you prefer a written request — email ${LEGAL_PLACEHOLDERS.privacyEmail} from the email address tied to the account. We will confirm and carry out the deletion; for workspaces in production use, we may ask a couple of verification questions first.`,
     ],
   },
   {
-    heading: "3. What deletion means for backups",
+    heading: "4. What deletion means for backups",
     paragraphs: [
       "Deletion applies immediately to the live database. Backups kept by the underlying hosting platform for recovery purposes may retain data for their standard backup window before those copies age out — the verified window is a placeholder until confirmed against the platform's actual practice.",
       "Similarly, AI providers may keep prompts and completions under their own published terms independent of our database. Their retention is subject to the provider terms listed in the Privacy Policy.",
     ],
   },
   {
-    heading: "4. What we retain and why",
+    heading: "5. What we retain and why",
     paragraphs: [
       "We retain only what is necessary for the law, for security, or for operating the service:",
     ],
@@ -39,7 +46,7 @@ const blocks: LegalBlock[] = [
     ],
   },
   {
-    heading: "5. Team members",
+    heading: "6. Team members",
     paragraphs: [
       "Adding someone to your team inserts their email so you can assign tasks to them. That is an entry about them, not a real account. Any person on a workspace team can ask for their entry to be removed: the workspace owner can do it in Settings, or they can write to the privacy contact.",
     ],

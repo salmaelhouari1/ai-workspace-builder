@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import { typeDisplay } from "@/lib/modules";
 import { CookieSettingsLink } from "@/components/CookieConsent";
+import { InstagramConnection } from "@/components/InstagramConnection";
 import { cn } from "@/lib/utils";
 import {
   Activity,
@@ -69,9 +70,10 @@ function DangerZone({ workspaceName }: { workspaceName: string }) {
           <p className="text-sm leading-relaxed">
             This permanently deletes{" "}
             <strong>{workspaceName}</strong> and every project, task, goal,
-            document, inbox entry and AI conversation in it — plus your account
-            and sign-in records. This cannot be undone, and there is no export
-            step.
+            document, inbox entry, marketing plan, AI conversation, connected
+            integration token, analytics record and report in it — plus your
+            account and sign-in records. This cannot be undone, and there is no
+            export step.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">
             Type the workspace name to confirm:
@@ -213,6 +215,9 @@ export default function Settings() {
           </Button>
         </div>
       </section>
+
+      {/* Integrations — official Instagram read-only connection */}
+      <InstagramConnection className="mt-5" />
 
       {/* Team */}
       <section className="mt-5 rounded-2xl border border-border/70 bg-card p-5">

@@ -28,7 +28,7 @@ export const recordTermsAcceptance = mutation({
   },
 });
 
-/** Tables that fan out directly from a workspace. */
+/** Tables that fan out directly from a workspace via a by_workspace index. */
 const WORKSPACE_TABLES = [
   "tasks",
   "projects",
@@ -38,6 +38,12 @@ const WORKSPACE_TABLES = [
   "activityLog",
   "workspaceMembers",
   "teamMembers",
+  "marketingIdeas",
+  "campaigns",
+  "marketingSuggestions",
+  "integrationConnections",
+  "integrationOAuthStates",
+  "analyticsContentLinks",
 ] as const;
 
 /** Delete every row that hangs off the workspace, then the workspace itself. */
@@ -45,6 +51,19 @@ async function deleteWorkspaceData(
   ctx: MutationCtx,
   workspaceId: Id<"workspaces">,
 ): Promise<void> {
+  // Marketing attachments live in Convex file storage; deleting the row
+  // without these calls would leave orphaned media behind.
+  const marketingEntries = await ctx.db
+    .query("marketingEntries")
+    .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+    .collect();
+  for (const entry of marketingEntries) {
+    for (const attachment of entry.attachments ?? []) {
+      await ctx.storage.delete(attachment.storageId);
+    }
+    await ctx.db.delete(entry._id);
+  }
+
   for (const table of WORKSPACE_TABLES) {
     const rows = await ctx.db
       .query(table)
@@ -52,6 +71,27 @@ async function deleteWorkspaceData(
       .collect();
     for (const row of rows) await ctx.db.delete(row._id);
   }
+
+  // Analytics tables use date/period indexes rather than a plain
+  // by_workspace index. Clean every one so provider data and derived reports
+  // cannot survive account deletion.
+  const analyticsTables = [
+    ["analyticsAccountDaily", "by_workspace_date"],
+    ["analyticsPeriods", "by_workspace_period"],
+    ["analyticsMedia", "by_workspace_timestamp"],
+    ["analyticsSyncRuns", "by_workspace_started"],
+    ["analyticsAudience", "by_workspace_captured"],
+    ["intelligenceReports", "by_workspace_created"],
+    ["intelligenceInsights", "by_workspace_created"],
+    ["intelligenceRecommendations", "by_workspace_created"],
+  ] as const;
+  for (const [table] of analyticsTables) {
+    const rows = await ctx.db.query(table).collect();
+    for (const row of rows) {
+      if (row.workspaceId === workspaceId) await ctx.db.delete(row._id);
+    }
+  }
+
   // AI messages need the conversation index — loop conversations first.
   const conversations = await ctx.db
     .query("aiConversations")
