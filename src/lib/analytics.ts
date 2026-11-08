@@ -165,7 +165,7 @@ export const METRIC_LABELS: Record<keyof PeriodMetrics, string> = {
   follows: "Follows",
   unfollows: "Unfollows",
   followerChange: "Follower change",
-  mediaCount: "Content published",
+  mediaCount: "Measured media",
 };
 
 /** New value minus old value; null when either side is unavailable. */
@@ -610,7 +610,7 @@ export function buildDeterministicReport(
     markdownMetric("Accounts engaged", metrics.accountsEngaged),
     markdownMetric("Followers", metrics.followers),
     markdownMetric("Follower change", metrics.followerChange),
-    markdownMetric("Content published", metrics.mediaCount),
+    markdownMetric("Measured media", metrics.mediaCount),
     "",
     "## Performance changes",
     "",
@@ -788,7 +788,7 @@ export function buildAIReport(
     markdownMetric("Accounts engaged", metrics.accountsEngaged),
     markdownMetric("Followers", metrics.followers),
     markdownMetric("Follower change", metrics.followerChange),
-    markdownMetric("Content published", metrics.mediaCount),
+    markdownMetric("Measured media", metrics.mediaCount),
     "",
     "## Performance changes",
     "",

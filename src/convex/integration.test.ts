@@ -306,6 +306,42 @@ describe("analytics storage and calculations", () => {
   });
 });
 
+describe("connection lifecycle", () => {
+  test("connecting a different account makes the new connection authoritative", async () => {
+    const t = setup();
+    const { userId, workspaceId } = await seedWorkspace(t);
+    const firstId = await insertConnection(t, workspaceId, userId);
+
+    const secondId = await t.mutation(internal.integrations.saveConnection, {
+      workspaceId,
+      userId,
+      providerAccountId: "17841400000000001",
+      appScopedUserId: "app-scoped-2",
+      username: "second_account",
+      accountType: "Creator",
+      accessTokenCiphertext: "ciphertext-placeholder",
+      tokenExpiresAt: Date.now() + 60 * 86_400_000,
+      scopes: [
+        "instagram_business_basic",
+        "instagram_business_manage_insights",
+      ],
+    });
+
+    const status = await t
+      .withIdentity({ subject: userId })
+      .query(api.integrations.status);
+    expect(status.connection?.username).toBe("second_account");
+
+    const rows = await t.run(async (ctx) => ({
+      first: await ctx.db.get(firstId),
+      second: await ctx.db.get(secondId),
+    }));
+    expect(rows.first?.status).toBe("disconnected");
+    expect(rows.first?.accessTokenCiphertext).toBeUndefined();
+    expect(rows.second?.status).toBe("connected");
+  });
+});
+
 describe("recommendation actions", () => {
   test("a recommendation can become an existing task and is marked actioned", async () => {
     const t = setup();

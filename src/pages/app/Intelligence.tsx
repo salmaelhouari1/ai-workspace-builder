@@ -589,7 +589,7 @@ export default function Intelligence() {
         reportType: type,
       });
       toast.success(
-        result.cached ? "Cached report reopened" : "Report generated",
+        result.cached ? "Cached report reused" : "Report generated",
         {
           description:
             result.source === "ai"

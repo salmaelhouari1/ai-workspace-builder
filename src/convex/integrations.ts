@@ -243,7 +243,8 @@ export const saveConnection = internalMutation({
             status: "disconnected",
             statusMessage: "Replaced by a newer connection",
             accessTokenCiphertext: undefined,
-            updatedAt: now,
+            // Keep the active connection unambiguous when timestamps tie.
+            updatedAt: now - 1,
           });
         }
       }
@@ -258,7 +259,8 @@ export const saveConnection = internalMutation({
           status: "disconnected",
           statusMessage: "Replaced by a newer connection",
           accessTokenCiphertext: undefined,
-          updatedAt: now,
+          // The new row must sort above the superseded connection.
+          updatedAt: now - 1,
         });
       }
     }
