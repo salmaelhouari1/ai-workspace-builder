@@ -41,6 +41,9 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Download,
+  ExternalLink,
+  Eye,
   FileText,
   Film,
   ImageIcon,
@@ -196,7 +199,7 @@ type Attachment = {
 
 const MAX_ATTACHMENTS = 6;
 
-/** Small image/video preview for an attachment stored in Convex storage. */
+/** Open an attachment preview, then download the original file. */
 function AttachmentThumb({
   attachment,
   onRemove,
@@ -207,39 +210,158 @@ function AttachmentThumb({
   const url = useQuery(api.marketing.attachmentUrl, {
     storageId: attachment.storageId,
   });
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const isImage = attachment.contentType.startsWith("image/");
+  const isVideo = attachment.contentType.startsWith("video/");
+  const kindLabel = isImage ? "Image" : isVideo ? "Video" : "File";
+
+  const downloadFile = async () => {
+    if (!url || downloading) return;
+    setDownloading(true);
+    try {
+      // Fetching first lets us keep the original filename on cross-origin
+      // storage URLs, where the download attribute alone is ignored.
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Download failed");
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = attachment.name;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1_000);
+    } catch {
+      // Storage may not expose the bytes to fetch(). The browser can still
+      // open the signed URL so the user can save it from the new tab.
+      window.open(url, "_blank", "noopener,noreferrer");
+      toast.info("Opened the original file — save it from your browser");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
-    <div className="group relative overflow-hidden rounded-lg border border-border/70 bg-background">
-      {url && isImage ? (
-        <img
-          src={url}
-          alt={attachment.name}
-          className="h-16 w-24 object-cover"
-        />
-      ) : (
-        <div className="flex h-16 w-24 flex-col items-center justify-center gap-1 px-1 text-muted-foreground">
-          {isImage ? (
-            <ImageIcon className="size-4" />
-          ) : (
-            <Film className="size-4" />
-          )}
-          <span className="w-full truncate text-center text-[9px]">
-            {attachment.name}
-          </span>
-        </div>
-      )}
-      {onRemove && (
+    <>
+      <div className="group relative overflow-hidden rounded-lg border border-border/70 bg-background">
         <button
           type="button"
-          onClick={onRemove}
-          aria-label={`Remove ${attachment.name}`}
-          className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-background/90 text-muted-foreground shadow-sm transition-colors hover:text-destructive"
+          onClick={() => setPreviewOpen(true)}
+          disabled={!url}
+          aria-label={`Preview ${attachment.name}`}
+          className="block h-16 w-24 cursor-zoom-in disabled:cursor-wait"
         >
-          <X className="size-3" />
+          {url && isImage ? (
+            <img
+              src={url}
+              alt={attachment.name}
+              className="h-16 w-24 object-cover"
+            />
+          ) : (
+            <div className="flex h-16 w-24 flex-col items-center justify-center gap-1 px-1 text-muted-foreground">
+              {isImage ? (
+                <ImageIcon className="size-4" />
+              ) : (
+                <Film className="size-4" />
+              )}
+              <span className="w-full truncate text-center text-[9px]">
+                {attachment.name}
+              </span>
+            </div>
+          )}
+          {url && (
+            <span className="absolute inset-0 flex items-center justify-center bg-foreground/0 text-background opacity-0 transition-colors group-hover:bg-foreground/30 group-hover:opacity-100">
+              <Eye className="size-5 drop-shadow" />
+            </span>
+          )}
         </button>
-      )}
-    </div>
+        {url && (
+          <button
+            type="button"
+            onClick={() => void downloadFile()}
+            disabled={downloading}
+            aria-label={`Download ${attachment.name}`}
+            title="Download"
+            className="absolute bottom-1 right-1 flex size-5 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-0 shadow-sm transition-all hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <Download className="size-3" />
+          </button>
+        )}
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`Remove ${attachment.name}`}
+            className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-background/90 text-muted-foreground shadow-sm transition-colors hover:text-destructive"
+          >
+            <X className="size-3" />
+          </button>
+        )}
+      </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-6">
+              {attachment.name}
+            </DialogTitle>
+            <DialogDescription>
+              {kindLabel} attachment · stored in OCIVO, never published
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex min-h-48 items-center justify-center overflow-hidden rounded-xl border border-border/70 bg-muted/30">
+            {url && isImage ? (
+              <img
+                src={url}
+                alt={attachment.name}
+                className="max-h-[65vh] w-full object-contain"
+              />
+            ) : url && isVideo ? (
+              <video
+                src={url}
+                controls
+                playsInline
+                className="max-h-[65vh] w-full bg-black"
+              >
+                Your browser cannot play this video.
+              </video>
+            ) : (
+              <div className="flex flex-col items-center gap-2 p-10 text-center text-muted-foreground">
+                <Film className="size-8" />
+                <p className="text-sm">
+                  {url
+                    ? "This file type can be downloaded but not previewed here."
+                    : "Preparing your file…"}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            {url ? (
+              <Button variant="outline" asChild>
+                <a href={url} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="size-4" />
+                  Open original
+                </a>
+              </Button>
+            ) : (
+              <Button variant="outline" disabled>
+                <ExternalLink className="size-4" />
+                Open original
+              </Button>
+            )}
+            <Button onClick={() => void downloadFile()} disabled={!url || downloading}>
+              <Download className="size-4" />
+              {downloading ? "Downloading…" : "Download"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -1889,21 +2011,26 @@ export default function Marketing() {
                   as part of the plan, it is never published.
                 </p>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {entryDraft.attachments.map((attachment) => (
-                    <AttachmentThumb
-                      key={attachment.storageId}
-                      attachment={attachment}
-                      onRemove={() =>
-                        setEntryDraft((d) => ({
-                          ...d,
-                          attachments: d.attachments.filter(
-                            (a) => a.storageId !== attachment.storageId,
-                          ),
-                        }))
-                      }
-                    />
-                  ))}
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap gap-2">
+                    {entryDraft.attachments.map((attachment) => (
+                      <AttachmentThumb
+                        key={attachment.storageId}
+                        attachment={attachment}
+                        onRemove={() =>
+                          setEntryDraft((d) => ({
+                            ...d,
+                            attachments: d.attachments.filter(
+                              (a) => a.storageId !== attachment.storageId,
+                            ),
+                          }))
+                        }
+                      />
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Select a file to preview it or download the original.
+                  </p>
                 </div>
               )}
             </div>
