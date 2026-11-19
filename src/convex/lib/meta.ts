@@ -47,7 +47,11 @@ export function getInstagramConfig(): InstagramConfig {
   if (!appSecret) missing.push("INSTAGRAM_APP_SECRET");
   if (!redirectUri) missing.push("INSTAGRAM_REDIRECT_URI");
   if (!appBaseUrl) missing.push("OCIVO_APP_URL");
-  if (!encryptionKey) missing.push("INTEGRATIONS_ENCRYPTION_KEY");
+  if (!encryptionKey) {
+    missing.push("INTEGRATIONS_ENCRYPTION_KEY");
+  } else if (encryptionKey.length < 32) {
+    missing.push("INTEGRATIONS_ENCRYPTION_KEY (min 32 characters)");
+  }
   if (graphVersion && !/^v\d+\.\d+$/.test(graphVersion)) {
     missing.push("INSTAGRAM_GRAPH_VERSION (format: v26.0)");
   }

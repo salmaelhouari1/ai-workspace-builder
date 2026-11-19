@@ -376,6 +376,21 @@ const schema = defineSchema(
       updatedAt: v.number(),
     }).index("by_workspace", ["workspaceId"]),
 
+    // Upload ownership proof. Convex storage IDs are opaque handles, not
+    // workspace-scoped permissions; every attachment must be registered here
+    // before the app will read, attach or delete its bytes.
+    marketingUploads: defineTable({
+      workspaceId: v.id("workspaces"),
+      userId: v.id("users"),
+      storageId: v.id("_storage"),
+      name: v.string(),
+      contentType: v.string(),
+      createdAt: v.number(),
+    })
+      .index("by_workspace_storage", ["workspaceId", "storageId"])
+      .index("by_workspace", ["workspaceId"])
+      .index("by_storage", ["storageId"]),
+
     // ------------------------------------------------------------------
     // Marketing intelligence — additive, provider-agnostic.
     // Access tokens only ever live here as ciphertext. Public queries return

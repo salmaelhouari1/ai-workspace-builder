@@ -345,6 +345,32 @@ export const markSyncError = internalMutation({
   },
 });
 
+/** Ensure an unexpected action failure cannot leave a run permanently busy. */
+export const failSyncRun = internalMutation({
+  args: {
+    syncRunId: v.id("analyticsSyncRuns"),
+    message: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.syncRunId);
+    if (!run || run.status !== "running") return;
+    const now = Date.now();
+    await ctx.db.patch(run._id, {
+      status: "error",
+      finishedAt: now,
+      error: args.message.slice(0, 500),
+    });
+    const connection = await ctx.db.get(run.connectionId);
+    if (connection && connection.lastSyncStatus === "running") {
+      await ctx.db.patch(connection._id, {
+        lastSyncStatus: "error",
+        lastSyncError: args.message.slice(0, 500),
+        updatedAt: now,
+      });
+    }
+  },
+});
+
 export const beginSync = internalMutation({
   args: {
     workspaceId: v.id("workspaces"),
@@ -429,23 +455,28 @@ export const recordOAuthFailure = internalMutation({
   handler: async (ctx, args) => {
     const connection = await latestConnection(ctx, args.workspaceId);
     const now = Date.now();
-    if (connection) {
+    // A failed reconnect must not downgrade a healthy existing connection.
+    // The callback still reports the failure to the user, and the activity log
+    // retains the attempt without touching the working token or status.
+    const preserveHealthyConnection =
+      connection?.status === "connected" &&
+      Boolean(connection.accessTokenCiphertext);
+    if (connection && !preserveHealthyConnection && connection.status !== "disconnected") {
       await ctx.db.patch(connection._id, {
         status: "error",
         statusMessage: args.message.slice(0, 300),
         updatedAt: now,
       });
-    } else {
-      // We do not create a fake connection just to hold an error. The OAuth
-      // failure is logged in the workspace activity trail instead.
-      await logActivity(ctx, {
-        workspaceId: args.workspaceId,
-        actor: "user",
-        action: "integration.instagram.failed",
-        detail: `Instagram connection failed: ${args.message.slice(0, 180)}`,
-        route: "/app/settings",
-      });
     }
+    // We do not create a fake connection just to hold an error. Every OAuth
+    // failure is recorded in the workspace activity trail instead.
+    await logActivity(ctx, {
+      workspaceId: args.workspaceId,
+      actor: "user",
+      action: "integration.instagram.failed",
+      detail: `Instagram connection failed: ${args.message.slice(0, 180)}`,
+      route: "/app/settings",
+    });
     return { ok: true as const, userId: args.userId };
   },
 });

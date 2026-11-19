@@ -482,6 +482,7 @@ export default function Marketing() {
   const removeCampaign = useMutation(api.marketing.removeCampaign);
   const generate = useAction(api.assistant.chat);
   const generateUploadUrl = useMutation(api.marketing.generateUploadUrl);
+  const registerUpload = useMutation(api.marketing.registerUpload);
 
   const [tab, setTab] = useState<Tab>("calendar");
   const [filters, setFilters] = useState({
@@ -752,6 +753,11 @@ export default function Marketing() {
         const { storageId } = (await res.json()) as {
           storageId: Id<"_storage">;
         };
+        await registerUpload({
+          storageId,
+          name: file.name,
+          contentType: file.type,
+        });
         next.push({ storageId, name: file.name, contentType: file.type });
       }
       setEntryDraft((d) => ({ ...d, attachments: next }));

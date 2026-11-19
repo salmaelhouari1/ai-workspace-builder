@@ -64,6 +64,17 @@ async function deleteWorkspaceData(
     await ctx.db.delete(entry._id);
   }
 
+  // Uploads that were never saved to an entry still belong to the workspace.
+  // Remove their bytes before dropping the ownership rows.
+  const marketingUploads = await ctx.db
+    .query("marketingUploads")
+    .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+    .collect();
+  for (const upload of marketingUploads) {
+    await ctx.storage.delete(upload.storageId);
+    await ctx.db.delete(upload._id);
+  }
+
   for (const table of WORKSPACE_TABLES) {
     const rows = await ctx.db
       .query(table)

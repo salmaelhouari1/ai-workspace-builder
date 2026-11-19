@@ -12,14 +12,18 @@ function setup() {
 type T = ReturnType<typeof setup>;
 
 /** A fresh backend with one workspace and one signed-in member. */
-async function seedWorkspace(t: T) {
+async function seedWorkspace(
+  t: T,
+  name = "Atelier",
+  email = "salma@example.com",
+) {
   return await t.run(async (ctx) => {
     const userId = await ctx.db.insert("users", {
-      name: "Salma",
-      email: "salma@example.com",
+      name,
+      email,
     });
     const workspaceId = await ctx.db.insert("workspaces", {
-      name: "Atelier",
+      name,
       businessType: "freelance",
       ownerId: userId,
       modules: [],
@@ -643,9 +647,23 @@ describe("attachments", () => {
     );
   }
 
+  async function register(
+    user: ReturnType<T["withIdentity"]>,
+    storageId: Id<"_storage">,
+    name = "cover.png",
+    contentType = "image/png",
+  ) {
+    await user.mutation(api.marketing.registerUpload, {
+      storageId,
+      name,
+      contentType,
+    });
+  }
+
   test("keeps image/video attachments and lists them with the entry", async () => {
     const { t, user } = await seeded();
     const storageId = await upload(t);
+    await register(user, storageId);
     const entryId = await user.mutation(api.marketing.create, {
       ...entryArgs(),
       attachments: [
@@ -661,7 +679,8 @@ describe("attachments", () => {
 
   test("deleting the entry deletes its files", async () => {
     const { t, user } = await seeded();
-    const storageId = await upload(t);
+    const storageId = await upload(t, "video/mp4");
+    await register(user, storageId, "clip.mp4", "video/mp4");
     const entryId = await user.mutation(api.marketing.create, {
       ...entryArgs(),
       attachments: [
@@ -677,6 +696,7 @@ describe("attachments", () => {
   test("removing an attachment on update deletes the stored file", async () => {
     const { t, user } = await seeded();
     const storageId = await upload(t);
+    await register(user, storageId);
     const entryId = await user.mutation(api.marketing.create, {
       ...entryArgs(),
       attachments: [
@@ -691,19 +711,71 @@ describe("attachments", () => {
     expect(file).toBeNull();
   });
 
-  test("non-media files are dropped and their uploads removed", async () => {
+  test("unregistered or non-media storage IDs are rejected without deleting them", async () => {
     const { t, user } = await seeded();
     const storageId = await upload(t, "application/pdf");
-    const entryId = await user.mutation(api.marketing.create, {
+    await expect(
+      user.mutation(api.marketing.create, {
+        ...entryArgs(),
+        attachments: [
+          { storageId, name: "brief.pdf", contentType: "application/pdf" },
+        ],
+      }),
+    ).rejects.toThrow("does not belong");
+
+    const file = await t.run((ctx) =>
+      ctx.db.system.get("_storage", storageId),
+    );
+    expect(file).not.toBeNull();
+    const entries = await t.run(async (ctx) =>
+      ctx.db.query("marketingEntries").collect(),
+    );
+    expect(entries).toHaveLength(0);
+  });
+
+  test("another workspace cannot read or attach this workspace's file", async () => {
+    const t = setup();
+    const first = await seedWorkspace(t);
+    const second = await seedWorkspace(t, "Other Studio", "other@example.com");
+    const firstUser = t.withIdentity({ subject: first.userId });
+    const secondUser = t.withIdentity({ subject: second.userId });
+    const storageId = await upload(t);
+    await register(firstUser, storageId);
+
+    const entryId = await firstUser.mutation(api.marketing.create, {
       ...entryArgs(),
       attachments: [
-        { storageId, name: "brief.pdf", contentType: "application/pdf" },
+        { storageId, name: "cover.png", contentType: "image/png" },
       ],
     });
+    expect(entryId).toBeTruthy();
+    await expect(
+      firstUser.query(api.marketing.attachmentUrl, { storageId }),
+    ).resolves.toEqual(expect.any(String));
 
-    const doc = await t.run((ctx) => ctx.db.get(entryId));
-    expect(doc?.attachments ?? []).toHaveLength(0);
-    const file = await t.run((ctx) => ctx.storage.get(storageId));
-    expect(file).toBeNull();
+    await expect(
+      secondUser.query(api.marketing.attachmentUrl, { storageId }),
+    ).rejects.toThrow("does not belong");
+    await expect(
+      secondUser.mutation(api.marketing.registerUpload, {
+        storageId,
+        name: "stolen.png",
+        contentType: "image/png",
+      }),
+    ).rejects.toThrow("another workspace");
+    await expect(
+      secondUser.mutation(api.marketing.create, {
+        ...entryArgs(),
+        title: "Stolen attachment",
+        attachments: [
+          { storageId, name: "stolen.png", contentType: "image/png" },
+        ],
+      }),
+    ).rejects.toThrow("does not belong");
+
+    const file = await t.run((ctx) =>
+      ctx.db.system.get("_storage", storageId),
+    );
+    expect(file).not.toBeNull();
   });
 });

@@ -1,5 +1,5 @@
-import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { ConvexError, v } from "convex/values";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { assertMember, requireWorkspace } from "./lib/auth";
 import { requireMarketingPlatform } from "../lib/marketing";
@@ -34,23 +34,75 @@ type Attachment = {
   contentType: string;
 };
 
+function isMediaType(contentType: string): boolean {
+  const value = contentType.trim().toLowerCase();
+  return value.startsWith("image/") || value.startsWith("video/");
+}
+
 /**
  * Attachments are planning assets: images and short videos only, at most six
  * per entry. Anything else is dropped rather than stored as a dead file.
  */
 function normalizedAttachments(list: Attachment[] | undefined): Attachment[] {
   return (list ?? [])
-    .filter(
-      (a) =>
-        a.contentType.toLowerCase().startsWith("image/") ||
-        a.contentType.toLowerCase().startsWith("video/"),
-    )
+    .filter((a) => isMediaType(a.contentType))
     .slice(0, MAX_ATTACHMENTS)
     .map((a) => ({
       storageId: a.storageId,
       name: a.name.trim().slice(0, 160) || "Attachment",
       contentType: a.contentType.trim().toLowerCase().slice(0, 80),
     }));
+}
+
+async function registeredUpload(
+  ctx: MutationCtx,
+  workspaceId: Id<"workspaces">,
+  storageId: Id<"_storage">,
+) {
+  return await ctx.db
+    .query("marketingUploads")
+    .withIndex("by_workspace_storage", (q) =>
+      q.eq("workspaceId", workspaceId).eq("storageId", storageId),
+    )
+    .first();
+}
+
+/** Never read, attach or delete bytes that were not uploaded to this workspace. */
+async function assertWorkspaceAttachments(
+  ctx: MutationCtx,
+  workspaceId: Id<"workspaces">,
+  attachments: Attachment[],
+  existing?: { attachments?: Attachment[] },
+) {
+  const existingIds = new Set(
+    (existing?.attachments ?? []).map((attachment) => attachment.storageId),
+  );
+  for (const attachment of attachments) {
+    if (existingIds.has(attachment.storageId)) continue;
+    if (!(await registeredUpload(ctx, workspaceId, attachment.storageId))) {
+      throw new ConvexError("That attachment does not belong to this workspace");
+    }
+  }
+}
+
+async function deleteWorkspaceAttachments(
+  ctx: MutationCtx,
+  workspaceId: Id<"workspaces">,
+  attachments: Attachment[],
+  existing?: { attachments?: Attachment[] },
+) {
+  const existingIds = new Set(
+    (existing?.attachments ?? []).map((attachment) => attachment.storageId),
+  );
+  const seen = new Set<Id<"_storage">>();
+  for (const attachment of attachments) {
+    if (seen.has(attachment.storageId)) continue;
+    seen.add(attachment.storageId);
+    const upload = await registeredUpload(ctx, workspaceId, attachment.storageId);
+    if (!upload && !existingIds.has(attachment.storageId)) continue;
+    await ctx.storage.delete(attachment.storageId);
+    if (upload) await ctx.db.delete(upload._id);
+  }
 }
 
 /** One-time upload URL for a planner attachment (image or video). */
@@ -62,11 +114,78 @@ export const generateUploadUrl = mutation({
   },
 });
 
-/** Signed URL for previewing an attachment the user already uploaded. */
+/**
+ * Bind an uploaded file to the caller's workspace before it can be previewed
+ * or attached. The one-time upload URL proves upload intent; this row proves
+ * which workspace owns the resulting storage ID.
+ */
+export const registerUpload = mutation({
+  args: {
+    storageId: v.id("_storage"),
+    name: v.string(),
+    contentType: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { userId, workspaceId } = await requireWorkspace(ctx);
+    const contentType = args.contentType.trim().toLowerCase().slice(0, 80);
+    if (!isMediaType(contentType)) {
+      throw new ConvexError("Attachments must be an image or video");
+    }
+    const name = args.name.trim().slice(0, 160) || "Attachment";
+    const existing = await registeredUpload(ctx, workspaceId, args.storageId);
+    if (existing) return { storageId: existing.storageId };
+
+    const elsewhere = await ctx.db
+      .query("marketingUploads")
+      .withIndex("by_storage", (q) => q.eq("storageId", args.storageId))
+      .first();
+    if (elsewhere && elsewhere.workspaceId !== workspaceId) {
+      throw new ConvexError("That upload belongs to another workspace");
+    }
+    if (!(await ctx.storage.getUrl(args.storageId))) {
+      throw new ConvexError("Uploaded file was not found");
+    }
+    await ctx.db.insert("marketingUploads", {
+      workspaceId,
+      userId,
+      storageId: args.storageId,
+      name,
+      contentType,
+      createdAt: Date.now(),
+    });
+    return { storageId: args.storageId };
+  },
+});
+
+/** Signed URL for previewing an attachment registered to this workspace. */
 export const attachmentUrl = query({
   args: { storageId: v.id("_storage") },
   handler: async (ctx, args) => {
-    await requireWorkspace(ctx);
+    const { workspaceId } = await requireWorkspace(ctx);
+    const upload = await ctx.db
+      .query("marketingUploads")
+      .withIndex("by_workspace_storage", (q) =>
+        q.eq("workspaceId", workspaceId).eq("storageId", args.storageId),
+      )
+      .first();
+
+    if (!upload) {
+      // Existing planner records predate the upload registry. They remain
+      // readable only when the storage ID is attached to an entry in this
+      // same workspace.
+      const entries = await ctx.db
+        .query("marketingEntries")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
+        .collect();
+      const linked = entries.some((entry) =>
+        (entry.attachments ?? []).some(
+          (attachment) => attachment.storageId === args.storageId,
+        ),
+      );
+      if (!linked) {
+        throw new ConvexError("That attachment does not belong to this workspace");
+      }
+    }
     return await ctx.storage.getUrl(args.storageId);
   },
 });
@@ -184,15 +303,17 @@ const createEntry = mutation({
     }
     const now = Date.now();
     const title = args.title.trim().slice(0, MAX_TITLE);
-    // Only image/video attachments are kept — discard anything else (and its
-    // uploaded file) so the workspace never stores dead media.
+    // Verify ownership before deleting rejected files or saving any reference.
+    await assertWorkspaceAttachments(ctx, workspaceId, args.attachments ?? []);
     const attachments = normalizedAttachments(args.attachments);
     const keptAttachments = new Set(attachments.map((a) => a.storageId));
-    for (const a of args.attachments ?? []) {
-      if (!keptAttachments.has(a.storageId)) {
-        await ctx.storage.delete(a.storageId);
-      }
-    }
+    await deleteWorkspaceAttachments(
+      ctx,
+      workspaceId,
+      (args.attachments ?? []).filter(
+        (attachment) => !keptAttachments.has(attachment.storageId),
+      ),
+    );
     // Double-submit guard: reject an identical record created moments ago.
     const recentEntries = await ctx.db
       .query("marketingEntries")
@@ -315,14 +436,26 @@ const updateEntry = mutation({
     if (args.audience !== undefined) patch.audience = args.audience.trim().slice(0, 160);
     if (args.campaignId !== undefined) patch.campaignId = args.campaignId ?? undefined;
     if (args.attachments !== undefined) {
+      await assertWorkspaceAttachments(
+        ctx,
+        entry.workspaceId,
+        args.attachments,
+        entry,
+      );
       const next = normalizedAttachments(args.attachments);
       patch.attachments = next;
       // Files removed from the entry (or rejected by validation) are deleted
-      // from storage so a workspace never keeps orphaned media.
+      // from storage so a workspace never keeps orphaned media. Only files
+      // proven to belong to this workspace are eligible for deletion.
       const kept = new Set(next.map((a) => a.storageId));
-      for (const old of [...(entry.attachments ?? []), ...args.attachments]) {
-        if (!kept.has(old.storageId)) await ctx.storage.delete(old.storageId);
-      }
+      await deleteWorkspaceAttachments(
+        ctx,
+        entry.workspaceId,
+        [...(entry.attachments ?? []), ...args.attachments].filter(
+          (attachment) => !kept.has(attachment.storageId),
+        ),
+        entry,
+      );
     }
 
     await ctx.db.patch(args.entryId, patch);
@@ -336,9 +469,12 @@ const removeEntry = mutation({
     const entry = await ctx.db.get(args.entryId);
     if (!entry) throw new Error("Content entry not found");
     await assertMember(ctx, entry.workspaceId);
-    for (const attachment of entry.attachments ?? []) {
-      await ctx.storage.delete(attachment.storageId);
-    }
+    await deleteWorkspaceAttachments(
+      ctx,
+      entry.workspaceId,
+      entry.attachments ?? [],
+      entry,
+    );
     await ctx.db.delete(args.entryId);
     return { ok: true };
   },

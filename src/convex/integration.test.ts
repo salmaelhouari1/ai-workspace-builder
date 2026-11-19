@@ -307,6 +307,59 @@ describe("analytics storage and calculations", () => {
 });
 
 describe("connection lifecycle", () => {
+  test("a failed reconnect preserves a healthy existing connection", async () => {
+    const t = setup();
+    const { userId, workspaceId } = await seedWorkspace(t);
+    const connectionId = await insertConnection(t, workspaceId, userId);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(connectionId, {
+        accessTokenCiphertext: "encrypted-token",
+        tokenExpiresAt: Date.now() + 60 * 86_400_000,
+      });
+    });
+
+    await t.mutation(internal.integrations.recordOAuthFailure, {
+      workspaceId,
+      userId,
+      message: "The user denied the new authorization request",
+    });
+
+    const row = await t.run((ctx) => ctx.db.get(connectionId));
+    expect(row?.status).toBe("connected");
+    expect(row?.accessTokenCiphertext).toBe("encrypted-token");
+    const activity = await t.run(async (ctx) =>
+      ctx.db.query("activityLog").collect(),
+    );
+    expect(activity.some((item) => item.action === "integration.instagram.failed")).toBe(
+      true,
+    );
+  });
+
+  test("an unexpected sync failure terminates the running run", async () => {
+    const t = setup();
+    const { userId, workspaceId } = await seedWorkspace(t);
+    await insertConnection(t, workspaceId, userId);
+    const started = await t.mutation(internal.integrations.beginSync, {
+      workspaceId,
+      trigger: "manual",
+    });
+    expect(started.busy).toBe(false);
+    if (started.busy) throw new Error("expected a running sync");
+
+    await t.mutation(internal.integrations.failSyncRun, {
+      syncRunId: started.syncRunId,
+      message: "Synthetic unexpected failure",
+    });
+
+    const state = await t.run(async (ctx) => ({
+      run: await ctx.db.get(started.syncRunId),
+      connection: await ctx.db.get(started.connectionId),
+    }));
+    expect(state.run?.status).toBe("error");
+    expect(state.run?.finishedAt).not.toBeUndefined();
+    expect(state.connection?.lastSyncStatus).toBe("error");
+  });
+
   test("connecting a different account makes the new connection authoritative", async () => {
     const t = setup();
     const { userId, workspaceId } = await seedWorkspace(t);
@@ -516,6 +569,21 @@ describe("account deletion", () => {
       });
     });
 
+    const orphanStorageId = await t.run(async (ctx) => {
+      const storageId = await ctx.storage.store(
+        new Blob(["orphan"], { type: "image/png" }),
+      );
+      await ctx.db.insert("marketingUploads", {
+        workspaceId,
+        userId,
+        storageId,
+        name: "orphan.png",
+        contentType: "image/png",
+        createdAt: now,
+      });
+      return storageId;
+    });
+
     const user = t.withIdentity({ subject: userId });
     await user.mutation(api.account.deleteMe, { confirmName: "Delete Me" });
 
@@ -531,6 +599,8 @@ describe("account deletion", () => {
         .query("intelligenceRecommendations")
         .collect(),
       runs: await ctx.db.query("analyticsSyncRuns").collect(),
+      uploads: await ctx.db.query("marketingUploads").collect(),
+      orphanFile: await ctx.db.system.get("_storage", orphanStorageId),
       user: await ctx.db.get(userId),
     }));
     expect(remaining.workspace).toBeNull();
@@ -543,5 +613,7 @@ describe("account deletion", () => {
     expect(remaining.reports).toHaveLength(0);
     expect(remaining.recommendations).toHaveLength(0);
     expect(remaining.runs).toHaveLength(0);
+    expect(remaining.uploads).toHaveLength(0);
+    expect(remaining.orphanFile).toBeNull();
   });
 });

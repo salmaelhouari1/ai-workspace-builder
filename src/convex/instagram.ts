@@ -230,6 +230,12 @@ async function syncConnection(
     throw new ConvexError("Instagram connection not found");
   }
   if (!connection.accessTokenCiphertext) {
+    await ctx.runMutation(internal.integrations.markSyncError, {
+      connectionId: connection._id,
+      syncRunId,
+      message: "Instagram needs to be reconnected",
+      needsReauth: true,
+    });
     throw new ConvexError("Instagram needs to be reconnected");
   }
 
@@ -657,12 +663,14 @@ export const completeOAuth = internalAction({
       // Initial sync is part of connection, but a sync failure must not undo a
       // valid OAuth connection. The UI can retry with a real error message.
       let syncStatus: "success" | "partial" | "pending" = "pending";
+      let initialSyncRunId: Id<"analyticsSyncRuns"> | null = null;
       try {
         const started = await ctx.runMutation(internal.integrations.beginSync, {
           workspaceId: binding.workspaceId,
           trigger: "initial",
         });
         if (!started.busy) {
+          initialSyncRunId = started.syncRunId;
           const result = await syncConnection(
             ctx,
             binding.workspaceId,
@@ -672,6 +680,15 @@ export const completeOAuth = internalAction({
           syncStatus = result.status;
         }
       } catch (error) {
+        if (initialSyncRunId) {
+          await ctx.runMutation(internal.integrations.failSyncRun, {
+            syncRunId: initialSyncRunId,
+            message:
+              error instanceof Error
+                ? error.message.slice(0, 280)
+                : "Initial Instagram sync failed",
+          });
+        }
         console.warn(
           "[ocivo] initial Instagram sync did not complete:",
           error instanceof Error ? error.message : error,
@@ -742,12 +759,21 @@ export const syncNow = action({
         syncedAt: null,
       };
     }
-    return await syncConnection(
-      ctx,
-      access.workspaceId,
-      started.connectionId,
-      started.syncRunId,
-    );
+    try {
+      return await syncConnection(
+        ctx,
+        access.workspaceId,
+        started.connectionId,
+        started.syncRunId,
+      );
+    } catch (error) {
+      await ctx.runMutation(internal.integrations.failSyncRun, {
+        syncRunId: started.syncRunId,
+        message:
+          error instanceof Error ? error.message.slice(0, 280) : "Synchronization failed",
+      });
+      throw error;
+    }
   },
 });
 
@@ -774,12 +800,14 @@ export const scheduledSync = internalAction({
     let synced = 0;
     let failed = 0;
     for (const connection of connections) {
+      let activeRunId: Id<"analyticsSyncRuns"> | null = null;
       try {
         const started = await ctx.runMutation(internal.integrations.beginSync, {
           workspaceId: connection.workspaceId,
           trigger: "scheduled",
         });
         if (started.busy) continue;
+        activeRunId = started.syncRunId;
         await syncConnection(
           ctx,
           connection.workspaceId,
@@ -787,7 +815,16 @@ export const scheduledSync = internalAction({
           started.syncRunId,
         );
         synced++;
-      } catch {
+      } catch (error) {
+        if (activeRunId) {
+          await ctx.runMutation(internal.integrations.failSyncRun, {
+            syncRunId: activeRunId,
+            message:
+              error instanceof Error
+                ? error.message.slice(0, 280)
+                : "Scheduled synchronization failed",
+          });
+        }
         failed++;
       }
     }
