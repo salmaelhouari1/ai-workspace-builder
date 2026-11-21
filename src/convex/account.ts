@@ -51,21 +51,19 @@ async function deleteWorkspaceData(
   ctx: MutationCtx,
   workspaceId: Id<"workspaces">,
 ): Promise<void> {
-  // Marketing attachments live in Convex file storage; deleting the row
-  // without these calls would leave orphaned media behind.
   const marketingEntries = await ctx.db
     .query("marketingEntries")
     .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
     .collect();
   for (const entry of marketingEntries) {
-    for (const attachment of entry.attachments ?? []) {
-      await ctx.storage.delete(attachment.storageId);
-    }
     await ctx.db.delete(entry._id);
   }
 
-  // Uploads that were never saved to an entry still belong to the workspace.
-  // Remove their bytes before dropping the ownership rows.
+  // Files are deleted only through their workspace ownership rows. Legacy
+  // entry attachments were created before ownership was tracked and cannot
+  // prove which workspace owns the bytes, so they are not blindly deleted.
+  // Their rows are removed with the workspace; registered uploads, including
+  // files already attached to an entry, are removed here.
   const marketingUploads = await ctx.db
     .query("marketingUploads")
     .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))

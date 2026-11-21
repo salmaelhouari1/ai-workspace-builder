@@ -1,6 +1,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 import { modules } from "./test.setup";
 import {
@@ -438,6 +439,7 @@ describe("account deletion", () => {
     const { userId, workspaceId } = await seedWorkspace(t, "Delete Me");
     const connectionId = await insertConnection(t, workspaceId, userId);
     const now = Date.now();
+    let attachedStorageId: Id<"_storage"> | null = null;
 
     await t.run(async (ctx) => {
       await ctx.db.insert("campaigns", {
@@ -524,6 +526,23 @@ describe("account deletion", () => {
       });
       const entry = await ctx.db.query("marketingEntries").first();
       if (entry) {
+        const storageId = await ctx.storage.store(
+          new Blob(["attached"], { type: "image/png" }),
+        );
+        attachedStorageId = storageId;
+        await ctx.db.insert("marketingUploads", {
+          workspaceId,
+          userId,
+          storageId,
+          name: "attached.png",
+          contentType: "image/png",
+          createdAt: now,
+        });
+        await ctx.db.patch(entry._id, {
+          attachments: [
+            { storageId, name: "attached.png", contentType: "image/png" },
+          ],
+        });
         await ctx.db.insert("analyticsContentLinks", {
           workspaceId,
           connectionId,
@@ -601,6 +620,9 @@ describe("account deletion", () => {
       runs: await ctx.db.query("analyticsSyncRuns").collect(),
       uploads: await ctx.db.query("marketingUploads").collect(),
       orphanFile: await ctx.db.system.get("_storage", orphanStorageId),
+      attachedFile: attachedStorageId
+        ? await ctx.db.system.get("_storage", attachedStorageId)
+        : null,
       user: await ctx.db.get(userId),
     }));
     expect(remaining.workspace).toBeNull();
@@ -615,5 +637,7 @@ describe("account deletion", () => {
     expect(remaining.runs).toHaveLength(0);
     expect(remaining.uploads).toHaveLength(0);
     expect(remaining.orphanFile).toBeNull();
+    expect(attachedStorageId).not.toBeNull();
+    expect(remaining.attachedFile).toBeNull();
   });
 });

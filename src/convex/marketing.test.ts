@@ -733,6 +733,49 @@ describe("attachments", () => {
     expect(entries).toHaveLength(0);
   });
 
+  test("registerUpload rejects a client MIME spoof against stored metadata", async () => {
+    const { t, user } = await seeded();
+    const storageId = await upload(t, "application/pdf");
+
+    await expect(
+      register(user, storageId, "not-really-an-image.png", "image/png"),
+    ).rejects.toThrow("image or video");
+
+    const state = await t.run(async (ctx) => ({
+      uploads: await ctx.db.query("marketingUploads").collect(),
+      file: await ctx.db.system.get("_storage", storageId),
+    }));
+    expect(state.uploads).toHaveLength(0);
+    expect(state.file).not.toBeNull();
+  });
+
+  test("removing an entry does not delete legacy unregistered files", async () => {
+    const { t, userId, workspaceId, user } = await seeded();
+    const storageId = await upload(t);
+    const entryId = await t.run((ctx) =>
+      ctx.db.insert("marketingEntries", {
+        workspaceId,
+        title: "Legacy attachment",
+        contentType: "post",
+        platform: "instagram",
+        body: "Body",
+        status: "draft",
+        tags: [],
+        attachments: [
+          { storageId, name: "legacy.png", contentType: "image/png" },
+        ],
+        workspaceMemberId: userId,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }),
+    );
+
+    await user.mutation(api.marketing.remove, { entryId });
+
+    const file = await t.run((ctx) => ctx.db.system.get("_storage", storageId));
+    expect(file).not.toBeNull();
+  });
+
   test("another workspace cannot read or attach this workspace's file", async () => {
     const t = setup();
     const first = await seedWorkspace(t);

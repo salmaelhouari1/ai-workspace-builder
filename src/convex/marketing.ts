@@ -89,19 +89,19 @@ async function deleteWorkspaceAttachments(
   ctx: MutationCtx,
   workspaceId: Id<"workspaces">,
   attachments: Attachment[],
-  existing?: { attachments?: Attachment[] },
 ) {
-  const existingIds = new Set(
-    (existing?.attachments ?? []).map((attachment) => attachment.storageId),
-  );
+  // Only files registered to this workspace may be deleted. Legacy entry
+  // records predate the registry and cannot prove ownership, so their bytes
+  // are deliberately left untouched rather than risking cross-workspace
+  // deletion from a record created under the old unrestricted API.
   const seen = new Set<Id<"_storage">>();
   for (const attachment of attachments) {
     if (seen.has(attachment.storageId)) continue;
     seen.add(attachment.storageId);
     const upload = await registeredUpload(ctx, workspaceId, attachment.storageId);
-    if (!upload && !existingIds.has(attachment.storageId)) continue;
+    if (!upload) continue;
     await ctx.storage.delete(attachment.storageId);
-    if (upload) await ctx.db.delete(upload._id);
+    await ctx.db.delete(upload._id);
   }
 }
 
@@ -142,15 +142,23 @@ export const registerUpload = mutation({
     if (elsewhere && elsewhere.workspaceId !== workspaceId) {
       throw new ConvexError("That upload belongs to another workspace");
     }
-    if (!(await ctx.storage.getUrl(args.storageId))) {
-      throw new ConvexError("Uploaded file was not found");
+
+    // The client supplies `contentType`, but the authoritative value is what
+    // Convex recorded when the bytes were uploaded. Never trust the client's
+    // MIME type for media validation or preview rendering.
+    const stored = await ctx.db.system.get("_storage", args.storageId);
+    if (!stored) throw new ConvexError("Uploaded file was not found");
+    const storedContentType =
+      stored.contentType?.trim().toLowerCase().slice(0, 80) ?? "";
+    if (!isMediaType(storedContentType)) {
+      throw new ConvexError("Attachments must be an image or video");
     }
     await ctx.db.insert("marketingUploads", {
       workspaceId,
       userId,
       storageId: args.storageId,
       name,
-      contentType,
+      contentType: storedContentType,
       createdAt: Date.now(),
     });
     return { storageId: args.storageId };
@@ -454,7 +462,6 @@ const updateEntry = mutation({
         [...(entry.attachments ?? []), ...args.attachments].filter(
           (attachment) => !kept.has(attachment.storageId),
         ),
-        entry,
       );
     }
 
@@ -473,7 +480,6 @@ const removeEntry = mutation({
       ctx,
       entry.workspaceId,
       entry.attachments ?? [],
-      entry,
     );
     await ctx.db.delete(args.entryId);
     return { ok: true };
